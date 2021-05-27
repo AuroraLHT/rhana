@@ -190,7 +190,8 @@ class Spectrum:
     def clip(self, clip_min, clip_max, inplace=True):
         return self._update_spectrum( np.clip( self.spec, clip_min, clip_max ), self.ws, inplace=inplace )
 
-    def remove_background(self, n=2, inplace=True):
+    # Backgroun subtraction
+    def remove_background(x, y, n=5, split=[]):
         """ 
             Assuming the background error is in linear form.
             Fit a linear line from n data points at the beginning and the end of the spectrum.
@@ -199,20 +200,63 @@ class Spectrum:
             Argument :
                 n : number of entries from front and tail to be consider
         """
-        if n > 1:
-            X = np.concatenate( (self.ws[0:n], self.ws[-n:]) )
-            Y = np.concatenate( (self.spec[0:n], self.spec[-n:]) )
-        else:
-            X = np.array([self.ws[0], self.ws[-1]])
-            Y = np.array([self.spec[0], self.spec[-1]])
-        X = np.stack( (X, np.ones_like(X)), axis=1 )
-        Y = Y.T
-
-        A = np.linalg.inv(X.T@X)@(X.T@Y)
+        def _remove_background(x, y):
+            if n > 1:
+                X = np.concatenate( (x[0:n], x[-n:]) )
+                Y = np.concatenate( (y[0:n], y[-n:]) )
+            else:
+                X = np.array([x[0], x[-1]])
+                Y = np.array([y[0], y[-1]])
+            X = np.stack((X, np.ones_like(X)), axis=1 )
+            Y = Y.T
+            # pdb.set_trace()
+            A = np.linalg.inv(X.T@X)@(X.T@Y)
+            # pdb.set_trace()
+            pX = np.stack( (x, np.ones_like(x)), axis=1 )
+            # pdb.set_trace()
+            background = (pX @ A)
+            nspec = y - background
+            # pdb.set_trace()
+            return nspec, background
         
-        pX = np.stack( (self.ws, np.ones_like(self.ws)), axis=1 )
-        nspec = self.spec - (pX @ A)
-        return self._update_spectrum( nspec, self.ws, inplace=inplace)
+        if split:
+            ys = []
+            bgs = []
+            split = [np.min(x)] + split + [np.max(x)+1e-10]
+            for i in range(len(split)-1):
+                mask = np.logical_and( x >= split[i], x < split[i+1] )
+                # pdb.set_trace()
+                ny, bg = _remove_background(x[mask], y[mask])
+                ys.append(ny)
+                bgs.append(bg)
+
+            return np.concatenate(ys), np.concatenate(bgs)
+        else:
+            return _remove_background(x, y)
+
+    # def remove_background(self, n=2, inplace=True):
+    #     """ 
+    #         Assuming the background error is in linear form.
+    #         Fit a linear line from n data points at the beginning and the end of the spectrum.
+    #         Subtract the spacetrum by the fitted linear intensity.
+
+    #         Argument :
+    #             n : number of entries from front and tail to be consider
+    #     """
+    #     if n > 1:
+    #         X = np.concatenate( (self.ws[0:n], self.ws[-n:]) )
+    #         Y = np.concatenate( (self.spec[0:n], self.spec[-n:]) )
+    #     else:
+    #         X = np.array([self.ws[0], self.ws[-1]])
+    #         Y = np.array([self.spec[0], self.spec[-1]])
+    #     X = np.stack( (X, np.ones_like(X)), axis=1 )
+    #     Y = Y.T
+
+    #     A = np.linalg.inv(X.T@X)@(X.T@Y)
+        
+    #     pX = np.stack( (self.ws, np.ones_like(self.ws)), axis=1 )
+    #     nspec = self.spec - (pX @ A)
+    #     return self._update_spectrum( nspec, self.ws, inplace=inplace)
 
 
     def filling_flat(self, trunc=0.99, inplace=True):
