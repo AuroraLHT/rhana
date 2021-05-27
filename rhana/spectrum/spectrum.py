@@ -161,16 +161,19 @@ class PeakAnalysisResult:
 class Spectrum:
     spec: np.ndarray # spectrum intensity
     ws: np.ndarray
-    background: Optional[np.ndarray] = None
 
-    def _update_spectrum(self, spec, ws, background=None, inplace=True):
+    def _update_spectrum(self, spec, ws, inplace=True, **kargs):
         if inplace:
             self.spec = spec
             self.ws = ws
-            self.background = background if background is not None else self.background
-            return self
+            spectrum = self
         else:
-            return Spectrum(spec, ws, background)
+            spectrum = Spectrum(spec, ws, background)
+
+        for k, v in kargs.items():
+            setattr(self, k, v)
+
+        return spectrum
 
     def normalization(self, inplace=True):
         """
