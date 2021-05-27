@@ -153,7 +153,7 @@ class SpectrumModel:
                 elif isinstance(config.type, type):
                     m_type = config.type.__name__
                     prefix = cls._model_prefix[m_type].format(i)
-                    model = t(prefix=prefix)
+                    model = config.type(prefix=prefix)
             except Exception as e:
                 raise NotImplemented(f'model {config.type} not implemented yet')
             
@@ -292,7 +292,7 @@ def fit_single(
                 spec.peak_fit_res = output
                 finished = True
         except Exception as e:
-            print(f"method: {method}") # all methods fails
+            print(f"method: {method} error:{e}") # all methods fails
 
     if not finished:
         spec.peak_fit_res = None
