@@ -205,8 +205,8 @@ class Spectrum:
             Argument :
                 n : number of entries from front and tail to be consider
         """
-        x = self.spec
-        y = self.ws
+        x = self.ws
+        y = self.spec
 
         def _remove_background(x, y):
             if n > 1:
