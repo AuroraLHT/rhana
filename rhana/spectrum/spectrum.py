@@ -168,7 +168,7 @@ class Spectrum:
             self.ws = ws
             spectrum = self
         else:
-            spectrum = Spectrum(spec, ws, background)
+            spectrum = Spectrum(spec, ws)
 
         for k, v in kargs.items():
             setattr(self, k, v)
