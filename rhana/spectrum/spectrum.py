@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.optimize import curve_fit
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 
 from dataclasses import dataclass, field
 from collections import namedtuple
@@ -161,14 +161,16 @@ class PeakAnalysisResult:
 class Spectrum:
     spec: np.ndarray # spectrum intensity
     ws: np.ndarray
+    background: Optional[np.ndarray] = None
 
-    def _update_spectrum(self, spec, ws, inplace=True):
+    def _update_spectrum(self, spec, ws, background=None, inplace=True):
         if inplace:
             self.spec = spec
             self.ws = ws
+            self.background = background if background is not None else self.background
             return self
         else:
-            return Spectrum(spec, ws)
+            return Spectrum(spec, ws, background)
 
     def normalization(self, inplace=True):
         """
@@ -191,7 +193,7 @@ class Spectrum:
         return self._update_spectrum( np.clip( self.spec, clip_min, clip_max ), self.ws, inplace=inplace )
 
     # Backgroun subtraction
-    def remove_background(x, y, n=5, split=[]):
+    def remove_background(self, n=5, split=[], inplace=True):
         """ 
             Assuming the background error is in linear form.
             Fit a linear line from n data points at the beginning and the end of the spectrum.
@@ -200,6 +202,9 @@ class Spectrum:
             Argument :
                 n : number of entries from front and tail to be consider
         """
+        x = self.spec
+        y = self.ws
+
         def _remove_background(x, y):
             if n > 1:
                 X = np.concatenate( (x[0:n], x[-n:]) )
@@ -230,9 +235,11 @@ class Spectrum:
                 ys.append(ny)
                 bgs.append(bg)
 
-            return np.concatenate(ys), np.concatenate(bgs)
+            new_spec, background = np.concatenate(ys), np.concatenate(bgs)
         else:
-            return _remove_background(x, y)
+            new_spec, background = _remove_background(x, y)
+
+        return self._update_spectrum(new_spec, self.ws, background=background, inplace=inplace)
 
     # def remove_background(self, n=2, inplace=True):
     #     """ 
