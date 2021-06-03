@@ -1,10 +1,11 @@
-import numpy as np
-from scipy.ndimage.filters import gaussian_filter1d
-from scipy.optimize import curve_fit
 from typing import List, Dict, Union, Optional
-
 from dataclasses import dataclass, field
 from collections import namedtuple
+
+import numpy as np
+from scipy.signal import savgol_filter
+from scipy.ndimage.filters import gaussian_filter1d
+from scipy.optimize import curve_fit
 
 from scipy.signal import find_peaks
 from scipy.spatial import distance_matrix
@@ -192,7 +193,7 @@ class Spectrum:
 
         return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
-    def savgol(self, window_length=15, polyorder=2, deriv=0, delta=1, mode="wrap", cval=0):
+    def savgol(self, window_length=15, polyorder=2, deriv=0, delta=1, mode="wrap", cval=0, inplace=True):
         """
             Savitzky-Golay filter for noise reduction. Parameters see scipy.signal.savgol_filter
             
