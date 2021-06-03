@@ -175,6 +175,10 @@ class Spectrum:
 
         return spectrum
 
+    def crop(self, sw, ew, inplace=True):
+        mask = np.logical_and(self.ws >= sw, angles <= ew)
+        self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
+
     def normalization(self, inplace=True):
         """
             normalize the spectrum by min, max value
@@ -188,9 +192,40 @@ class Spectrum:
 
         return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
+    def savgol(self, window_length=15, polyorder=2, deriv=0, delta=1, mode="wrap", cval=0):
+        """
+            Savitzky-Golay filter for noise reduction. Parameters see scipy.signal.savgol_filter
+            
+            Arguments:
+                window_length : The length of the filter window (i.e., the number of coefficients). Must be odd
+                polyorder : The order of the polynomial used to fit the samples. polyorder must be less than window_length.
+                deriv : The order of the derivative to compute. This must be a nonnegative integer. 
+                  The default is 0, which means to filter the data without differentiating.
+                delta: The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.
+                mode : Must be ‘mirror’, ‘constant’, ‘nearest’, ‘wrap’ or ‘interp’. 
+                    This determines the type of extension to use for the padded signal to which the filter is applied. 
+                    When mode is ‘constant’, the padding value is given by cval. See the Notes for more details on ‘mirror’,
+                     ‘constant’, ‘wrap’, and ‘nearest’. When the ‘interp’ mode is selected (the default), no extension is used. 
+                    Instead, a degree polyorder polynomial is fit to the last window_length values of the edges, 
+                      and this polynomial is used to evaluate the last window_length // 2 output values.
+
+                cval : Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.
+
+        """
+        filtered = savgol_filter(
+            self.spec, 
+            window_length=window_length,
+            polyorder=polyorder,
+            deriv=deriv,
+            delta=delta, 
+            mode=mode,
+            cval= 0, # if mode is not constant then whatever
+        )
+        return self._update_spectrum(filtered, self.ws, inplace=inplace)
+
     def smooth(self, sigma=1, inplace=True, **kargs):
         nspec = gaussian_filter1d(self.spec, sigma=sigma, **kargs)
-        return self._update_spectrum(nspec, self.ws)
+        return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
     def clip(self, clip_min, clip_max, inplace=True):
         return self._update_spectrum( np.clip( self.spec, clip_min, clip_max ), self.ws, inplace=inplace )
