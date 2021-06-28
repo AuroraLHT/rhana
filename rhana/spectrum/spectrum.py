@@ -160,10 +160,22 @@ class PeakAnalysisResult:
 
 @dataclass
 class Spectrum:
-    spec: np.ndarray # spectrum intensity
+    """
+        The Spectrum class is built to abstractalize all spectral data.
+        It consists of two fields:
+            spec : the intensity of the spectrum stored in an array form
+            ws : the location of the intensity stored in an array form
+    """
+
+    spec: np.ndarray
     ws: np.ndarray
 
     def _update_spectrum(self, spec, ws, inplace=True, **kargs):
+        """
+            do an update in the current spectrum's field or create a
+            new spectrum and do update over that object.
+        """
+
         if inplace:
             self.spec = spec
             self.ws = ws
@@ -177,17 +189,22 @@ class Spectrum:
         return spectrum
 
     def crop(self, sw, ew, inplace=True):
-        mask = np.logical_and(self.ws >= sw, angles <= ew)
+        mask = np.logical_and(self.ws >= sw, self.ws <= ew)
         self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
 
-    def normalization(self, inplace=True):
+    def normalization(self, min_v=None, max_v=None, inplace=True):
         """
             normalize the spectrum by min, max value
             if min max is not given then it would be computed from the given spectrum
+
+            Arguments:
+                min_v : minimum value
+                max_v : maximum value
+                inplace : if true update current object else return new object
         """
         
-        _min = self.spec.min()
-        _max = self.spec.max()
+        _min = self.spec.min() if min_v is None else min_v
+        _max = self.spec.max() if max_v is None else max_v
         
         nspec = (self.spec - _min) / (_max - _min + 1e-5)
 
@@ -333,7 +350,8 @@ class Spectrum:
             Find Peaks over the list of spectrum. 
             
             Arguments:
-                thres : background noise level, see find_peaks ref to more detail
+                height : minimum height of the peak, see find_peaks ref to more detail 
+                thres : minimum vertical distance to its neighbor peak, see find_peaks ref to more detail 
                 prominence : peak prominence, see find_peaks ref to more detail 
         """
         peaks, peaks_info = find_peaks(self.spec, height=height, threshold=threshold, prominence=prominence, **peak_args)
@@ -373,7 +391,21 @@ class Spectrum:
         
         return analyze_peaks_distance_cent(self.peaks, center_nbr_dists, center_peak, center_peak_i, grid_min_w, grid_max_w, tolerant, abs_tolerant, allow_discontinue)
 
-    def plot_spectrum(self, ax=None, peaks=None, peakgroups=None, offset=0, peak_offset=0, showlegend=False, exclusive=True, **fig_kargs):
+    def plot_spectrum(self, ax=None, peaks=None, peakgroups=None, offset=0, peak_offset=0, showlegend=False, **fig_kargs):
+        """
+            Plot the spectrum using matplotlib
+            Arguments:
+                ax : the matplotlib Axes to plot onto, if None then a new figure is created
+                peaks : the peaks index in array form 
+                peakgroups : a group index of peak's index telling how peak index is group togethered
+                offset : a offset that life the spectrum line 
+                peak_offset : a offset that lift the peak symbol away from the spectrum line
+                showlegend : show legend
+            Return
+                fig : matplotlib Figure
+                ax : matplotlib Axes
+        """
+
         # peaks, peaksinfo = peaks
         fig, ax = _create_figure(ax=ax, **fig_kargs)
         peak_offset_arr = np.zeros_like(peaks, dtype=float)
@@ -427,6 +459,15 @@ class Spectrum:
 
 @dataclass
 class CollapseSpectrum(Spectrum):
+    """
+        an intergrated 1D spectrum from a region of a 2D diffraction image
+
+        sx: cropped starting point - x
+        sy : cropped starting point - y
+        ex : cropped ending point - x
+        ey : cropped ending point - y
+    """
+
     sx: int # cropped starting point - x
     sy : int #  cropped starting point - y
     ex : int # cropped ending point - x
