@@ -192,6 +192,27 @@ class Spectrum:
         mask = np.logical_and(self.ws >= sw, self.ws <= ew)
         self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
 
+    def interpolate(self, ws, fill_value=0, kind='linear', assume_sorted=True, inplace=True):
+        """
+            Perform interplaction on the spectrum given a new location ws
+
+            Arguments:
+                ws : a new location to interpolation on
+                fill_value : the constant to fill when location is outside the range of the spectrum
+                kind : interpolation method. Could be 'linear', 'nearest', 'nearest-up', 'zero', 'slinear', 'quadratic', 'cubic', 'previous', or 'next'.
+                assume_sorted : assume x is monotonically increasing value
+                inplace : update the current spectrum or create a new spectrum
+
+            Return: Spectrum
+        """
+
+        f = interp1d(self.ws, self.spec, bounds_error=False, fill_value=fill_value, kind=kind, assume_sorted=assume_sorted)
+        new_ws = ws
+        new_spec = f(new_ws)
+
+        return self._update_spectrum(spec=new_spec, ws=new_ws, inplace=inplace)
+
+
     def normalization(self, min_v=None, max_v=None, inplace=True):
         """
             normalize the spectrum by min, max value
