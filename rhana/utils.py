@@ -1,3 +1,4 @@
+import pickle
 import signal
 
 import colorlover as cl
@@ -8,6 +9,14 @@ import matplotlib.patches as mpatches
 _CM_rgb = cl.scales['10']['qual']['Paired']
 _CM = cl.to_numeric( cl.scales['10']['qual']['Paired'] )
 _CM = list( map(lambda x: "#{:02x}{:02x}{:02x}".format(*tuple(map(int, x)) ), _CM ) ) # transfer "rgb(0,0,0)" into #FFFFFF format
+
+def save_pickle(obj, file):
+    with Path(file).open("wb") as f:
+        pickle.dump(obj, f)
+
+def load_pickle(file):
+    with Path(file).open("rb") as f:
+        return pickle.load(f)
 
 def gaussian(x, A, x0, sig):
     return A*np.exp(-(x-x0)**2/(2*sig**2))
