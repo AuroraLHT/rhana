@@ -1,5 +1,5 @@
 from typing import List, Dict, Union, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from collections import namedtuple
 
 import numpy as np
@@ -181,7 +181,9 @@ class Spectrum:
             self.ws = ws
             spectrum = self
         else:
-            spectrum = Spectrum(spec, ws)
+            # copy rest of the fields
+            stored = { field.name : getattr(self, field.name) for field in fields(self) if field.name not in ["spec", "ws"] }
+            spectrum = self.__class__(spec, ws, **stored)
 
         for k, v in kargs.items():
             setattr(self, k, v)
