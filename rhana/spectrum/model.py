@@ -1,24 +1,43 @@
 from dataclasses import dataclass
+from pathlib import Path
+
 import signal
 
 import numpy as np
 
 from lmfit.model import Parameters, Parameter
 from lmfit import models as lm_models
-from lmfit.model import save_modelresult, save_model
+from lmfit.model import save_modelresult, save_model, load_model
 
 from rhana.utils import _create_figure
+from rhana.utils import Timeout
+from rhana.utils import load_pickle, save_pickle
+
 from rhana.spectrum.spectrum import Spectrum
 
-def maximum_amplitude(spectrum):
+
+def maximum_amplitude(spectrum:Spectrum):
     # intergral by trapezoidal rule
     return float(np.trapz(spectrum.spec, spectrum.ws))
+
 
 @dataclass
 class SpectrumModelConfig:
     """
         all parameter with dict type follow this convention
         {"value":..., "vary":..., "min":..., "max":..., "expr":...}
+        
+        height : confine the height of the peak
+        sigma : confine the width of the peak
+        center : confine the location of the peak
+        amplitude : confine the AOC of the peak
+        type : coule be one of the "GaussianModel", "LorentzianModel", "VoigtModel"
+        poly_n : the polynomial order of the background, range from 0 to 7
+        peak_window : how many pixel around left and right side of the peak is used to guess the solution
+        add_vogit_bg : add a vogit back ground peak
+        vogit_bg_amp_ratio : 
+        center_search_width : float
+        
     """
     height : dict
     sigma : dict
@@ -44,10 +63,11 @@ class SpectrumModel:
         "VoigtModel":"V{}_"
     }
     
-    def __init__(self, model, sub_models, params,):
+    def __init__(self, model, sub_models, params, result=None):
         self.sub_models = sub_models # list of lmfit models
         self.model = model
         self.params = params
+        self.result = result
     
     @classmethod
     def from_peaks(cls, peaks, peaks_info, spec, config, bg_mask, by="guess"):
@@ -65,7 +85,7 @@ class SpectrumModel:
                 params = model_params
             else:
                 params.update(model_params)
-#             display(params)    
+            # display(params)    
             if composite_model is None:
                 composite_model = model
             else:
@@ -196,9 +216,9 @@ class SpectrumModel:
             model.set_param_hint('height', **config.height)
             model.set_param_hint('amplitude', **config.amplitude)
             
-#             guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
+            # guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
             guess_params = model.guess(spec.spec, spec.ws)
-#             guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio
+            # guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio
     
             params, sub_models, composite_model = _update(model, guess_params, params, sub_models, composite_model)
         
@@ -214,19 +234,27 @@ class SpectrumModel:
         
         return self
     
-    def fit(self, spec, **kargs):
-        output = self.model.fit(
-            data = spec.spec,
-            params= self.params,
-            x = spec.ws,
-            **kargs
-        )
-        return output
+    def fit(self, spec, timeout=5, **kargs):
+        def _fit():
+            output = self.model.fit(
+                data = spec.spec,
+                params= self.params,
+                x = spec.ws,
+                **kargs
+            )
+            return output
+        
+        if timeout is not None:
+            with Timeout(seconds=timeout):
+                self.result = _fit()
+        else:
+            self.result = _fit()
+        return self.result
     
     def plot_component(self, spec, xlabel=None, ylabel=None, ax=None, **kargs):
         fig, ax = _create_figure(ax=ax, **kargs)
         ax.scatter(spec.ws, spec.spec, s=4)
-        components = self.output_fit.eval_components(x=spec.ws)
+        components = self.result.eval_components(x=spec.ws)
 
         for k, v in components.items():
             ax.plot(spec.ws, v, label=k)
@@ -238,22 +266,75 @@ class SpectrumModel:
 
         return fig, ax
 
+    def is_fit_succ(self, thres_err=100, thres_fwhm=1, no_rela_okay=False):
+        # should look into relative err see below's cell of how to get it from result
+        if has_no_rela_err(self.result):
+            return not no_rela_okay
+        else:
+            h_err = has_high_rela_err(self.result, thres_err)
+            h_fwhm = has_high_fwhm(self.result, thres_fwhm)
+            return  h_err or h_fwhm
+
+    @staticmethod
+    def has_high_fwhm(peak_fit_res, thres=1):
+        params = peak_fit_res.result.params
+        for k,v in params.items():
+            if re.search("[VGL]\d+_fwhm", k) is not None:
+                if v.value is None:
+                    return True
+                elif v.value > thres:
+                    return True
+        return False
+    
+    @staticmethod
+    def has_no_rela_err(peak_fit_res):
+        if peak_fit_res is None: return True
+
+        params = peak_fit_res.result.params
+        for k,v in params.items():
+            if v.stderr is None:
+                return True
+        return False
+
+    @staticmethod
+    def has_high_rela_err(peak_fit_res, thres=100):
+        params = peak_fit_res.result.params
+        for k,v in params.items():
+            if v.stderr is None:
+                pass # sometimes it would not compute the stderr
+            else:
+                relative_err = int(max(0, v.stderr / v.value * 100))
+                if relative_err > thres:
+                    return True
+        return False
+
+    def save(self, path): 
+        path = Path(path)
+        assert path.is_dir(), f"path {path} must be path"
+        params_path = path/"params.pkl"
+        model_path = path/"model.sav"        
+        
+        model = self.result.model
+        save_model(model, str(model_path))
+        
+        params = self.result.params
+        save_pickle(params, params_path)
+        
+    
+    @classmethod
+    def load(cls, path):
+        path = Path(path)
+        assert path.is_dir(), f"path {path} must be path"
+        params_path = path/"params.pkl"
+        model_path = path/"model.sav"        
+        
+        model = load_model(str(model_path))
+        params = load_pickle(params_path)
+    
     def plot_fit(self, spec, **kargs):
         fig, gridspec = self.output_fit.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
-
-class Timeout:
-    def __init__(self, seconds=1, error_message='Timeout'):
-        self.seconds = seconds
-        self.error_message = error_message
-    def handle_timeout(self, signum, frame):
-        raise TimeoutError(self.error_message)
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)
-        signal.alarm(self.seconds)
-    def __exit__(self, type, value, traceback):
-        signal.alarm(0)
 
 def fit_single(
     spec, config,
@@ -286,11 +367,10 @@ def fit_single(
     for method in ["guess", "other"]:
         if finished: break
         try:
-            with Timeout(seconds=timeout):
-                sm = SpectrumModel.from_peaks(peaks, peaksinfo, spec, config, bg_mask, by=method)
-                output= sm.fit(spec, method=fit_method)
-                spec.peak_fit_res = output
-                finished = True
+            sm = SpectrumModel.from_peaks(peaks, peaksinfo, spec, config, bg_mask, by=method)
+            output= sm.fit(spec, method=fit_method, timeout=timeout)
+            spec.peak_fit_res = output
+            finished = True
         except Exception as e:
             print(f"method: {method} error:{e}") # all methods fails
 
