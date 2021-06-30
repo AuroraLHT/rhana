@@ -192,7 +192,7 @@ class Spectrum:
 
     def crop(self, sw, ew, inplace=True):
         mask = np.logical_and(self.ws >= sw, self.ws <= ew)
-        self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
+        return self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
 
     def interpolate(self, ws, fill_value=0, kind='linear', assume_sorted=True, inplace=True):
         """
