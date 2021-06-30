@@ -48,7 +48,7 @@ def crop(img, sx, sy, ex, ey):
     return img[sx:ex, sy:ey]
 
 
-class timeout:
+class Timeout:
     """
         Ref: https://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
         A timeout class for killing code pieces that run too long
