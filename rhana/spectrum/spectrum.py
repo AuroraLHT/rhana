@@ -444,7 +444,7 @@ class Spectrum:
                 g, _ = peakgroups[-1]
                 ax.plot(self.ws[peaks[g]], self.spec[peaks[g]]+offset+offset+peak_offset_arr[g], "o")
             else:
-                ax.plot(self.ws[peaks], self.spec[peaks]+offset, "x")
+                ax.plot(self.ws[peaks], self.spec[peaks]+offset+peak_offset, "x")
         
         if showlegend: ax.legend()
         return fig, ax
