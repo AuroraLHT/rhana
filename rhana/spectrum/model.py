@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +34,7 @@ class SpectrumModelConfig:
         amplitude : confine the AOC of the peak
         type : coule be one of the "GaussianModel", "LorentzianModel", "VoigtModel"
         poly_n : the polynomial order of the background, range from 0 to 7
+        poly_zero_init : do zero initialize on polynomial term
         peak_window : how many pixel around left and right side of the peak is used to guess the solution
         add_vogit_bg : add a vogit back ground peak
         vogit_bg_amp_ratio : 
@@ -45,6 +47,7 @@ class SpectrumModelConfig:
     amplitude : dict
     type : list
     poly_n : int
+    poly_zero_init : bool
     peak_window : int
     add_vogit_bg : bool
     vogit_bg_amp_ratio : float
@@ -85,7 +88,7 @@ class SpectrumModel:
                 params = model_params
             else:
                 params.update(model_params)
-            # display(params)    
+            # display(params)
             if composite_model is None:
                 composite_model = model
             else:
@@ -175,7 +178,7 @@ class SpectrumModel:
                     prefix = cls._model_prefix[m_type].format(i)
                     model = config.type(prefix=prefix)
             except Exception as e:
-                raise NotImplemented(f'model {config.type} not implemented yet')
+                raise NotImplemented(f'model {config.type} not implemented yet. Error {e}')
             
             
             center = dict(config.center)
@@ -204,7 +207,10 @@ class SpectrumModel:
         # add lm_models.PolynomialModel() for background
         
         model = lm_models.PolynomialModel(degree=config.poly_n)
-        guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
+        if config.poly_zero_init:
+            guess_params = model.make_params(**{ f"c{i}" : 0 for i in range(config.poly_n+1)})
+        else:
+            guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
 
         params, sub_models, composite_model = _update(model, guess_params, params, sub_models, composite_model)
         
@@ -266,20 +272,20 @@ class SpectrumModel:
 
         return fig, ax
 
-    def is_fit_succ(self, thres_err=100, thres_fwhm=1, no_rela_okay=False):
+    def is_fit_fail(self, thres_err=100, thres_fwhm=1, no_rela_okay=False):
         # should look into relative err see below's cell of how to get it from result
-        if has_no_rela_err(self.result):
+        if self.has_no_rela_err(self.result):
             return not no_rela_okay
         else:
-            h_err = has_high_rela_err(self.result, thres_err)
-            h_fwhm = has_high_fwhm(self.result, thres_fwhm)
+            h_err = self.has_high_rela_err(self.result, thres_err)
+            h_fwhm = self.has_high_fwhm(self.result, thres_fwhm)
             return  h_err or h_fwhm
 
     @staticmethod
     def has_high_fwhm(peak_fit_res, thres=1):
         params = peak_fit_res.result.params
-        for k,v in params.items():
-            if re.search("[VGL]\d+_fwhm", k) is not None:
+        for k, v in params.items():
+            if re.search(r"[VGL]\d+_fwhm", k) is not None:
                 if v.value is None:
                     return True
                 elif v.value > thres:
@@ -291,7 +297,7 @@ class SpectrumModel:
         if peak_fit_res is None: return True
 
         params = peak_fit_res.result.params
-        for k,v in params.items():
+        for k, v in params.items():
             if v.stderr is None:
                 return True
         return False
@@ -299,7 +305,7 @@ class SpectrumModel:
     @staticmethod
     def has_high_rela_err(peak_fit_res, thres=100):
         params = peak_fit_res.result.params
-        for k,v in params.items():
+        for k, v in params.items():
             if v.stderr is None:
                 pass # sometimes it would not compute the stderr
             else:
@@ -330,9 +336,10 @@ class SpectrumModel:
         
         model = load_model(str(model_path))
         params = load_pickle(params_path)
+        return cls(model, [], params)
     
     def plot_fit(self, spec, **kargs):
-        fig, gridspec = self.output_fit.plot(data_kws={'markersize': 1}, **kargs)
+        fig, gridspec = self.result.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
 
