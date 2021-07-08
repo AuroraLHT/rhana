@@ -14,10 +14,8 @@ from rhana.utils import _create_figure
 from rhana.utils import Timeout
 from rhana.utils import load_pickle, save_pickle
 
-from rhana.spectrum.spectrum import Spectrum
 
-
-def maximum_amplitude(spectrum:Spectrum):
+def maximum_amplitude(spectrum):
     # intergral by trapezoidal rule
     return float(np.trapz(spectrum.spec, spectrum.ws))
 
@@ -178,7 +176,7 @@ class SpectrumModel:
                     prefix = cls._model_prefix[m_type].format(i)
                     model = config.type(prefix=prefix)
             except Exception as e:
-                raise NotImplemented(f'model {config.type} not implemented yet. Error {e}')
+                raise NotImplementedError(f'model {config.type} not implemented yet. Error {e}')
             
             
             center = dict(config.center)

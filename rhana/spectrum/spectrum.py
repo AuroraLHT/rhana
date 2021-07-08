@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Dict, Union, Optional
 from dataclasses import dataclass, field, fields
 from collections import namedtuple
@@ -14,7 +15,9 @@ from scipy.interpolate import interp1d
 
 from lmfit import models as lm_models
 
-from rhana.utils import _create_figure, crop
+from rhana.spectrum.model import SpectrumModel
+from rhana.utils import _create_figure, crop, save_pickle, load_pickle
+
 
 def gaussian(x, A, x0, sig):
     return A*np.exp(-(x-x0)**2/(2*sig**2))
@@ -490,6 +493,26 @@ class Spectrum:
         out.append( ((np.arange(len(peaks))[~selected]).tolist(), -1 ) )
         return out
 
+
+    def save(self, path):
+        _exclude = ['sm']
+        path = Path(path)
+        temps = {k:v for k, v in self.__dict__.items() if k in _exclude }
+        
+        for k in _exclude: setattr(self, k, None)
+
+        save_pickle(self, path/"XRD.pkl")
+
+        if "sm" in temps: temps['sm'].save(path)
+
+        for k, v in temps.items(): setattr(self, k, v)
+    
+    @classmethod
+    def load(cls, path):
+        self = load_pickle(path/"XRD.pkl")
+        if hasattr(self, "sm"):
+            self.sm = SpectrumModel.load(path)
+        return self
 
 @dataclass
 class CollapseSpectrum(Spectrum):
