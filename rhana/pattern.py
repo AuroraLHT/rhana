@@ -32,7 +32,7 @@ from typing import List, Dict, Union
 
 from rhana.utils import _CM_rgb, _CM, multi_gaussian, gaussian, show_circle, _create_figure, crop
 from rhana.io import kashiwa as ksw
-from rhana.spectrum import CollapseSpectrum, analyze_peaks_distance_cent, get_center_peak_idxs, get_center_peak_idx, get_peaks_distance
+from rhana.spectrum.spectrum import CollapseSpectrum, analyze_peaks_distance_cent, get_center_peak_idxs, get_center_peak_idx, get_peaks_distance
 from rhana.utils import *
 
 from dataclasses import dataclass, field
