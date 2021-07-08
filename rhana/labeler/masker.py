@@ -11,7 +11,7 @@ class UnetMasker:
         self.learn = load_learner(learner_path, cpu=cpu)
 
     def predict(self, rd, do_rle=False):
-        shape = rd.pattern.shape
+        # shape = rd.pattern.shape
 
         inp = RHEEDTensorImage.create(np.tile(rd.pattern, (3, 1, 1)))
         outputs = self.learn.predict(inp)
