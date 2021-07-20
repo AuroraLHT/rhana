@@ -6,7 +6,8 @@ import signal
 
 import numpy as np
 
-from lmfit.model import Parameters, Parameter, Model, update_param_vals
+from lmfit.model import Parameters, Parameter,
+from lmfit.models import Model, update_param_vals
 from lmfit import models as lm_models
 from lmfit.model import save_modelresult, save_model, load_model
 
