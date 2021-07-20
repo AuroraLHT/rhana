@@ -6,7 +6,7 @@ import signal
 
 import numpy as np
 
-from lmfit.model import Parameters, Parameter
+from lmfit.model import Parameters, Parameter, Model, update_param_vals
 from lmfit import models as lm_models
 from lmfit.model import save_modelresult, save_model, load_model
 
@@ -18,6 +18,60 @@ from rhana.utils import load_pickle, save_pickle
 def maximum_amplitude(spectrum):
     # intergral by trapezoidal rule
     return float(np.trapz(spectrum.spec, spectrum.ws))
+
+class ChebyshevPolynomialModel(Model):
+    r"""A polynomial model with up to 7 Parameters, specified by `degree`.
+    .. math::
+        Tn(cos(theta)) = cos(n*theta)
+    with parameters `c0`, `c1`, ..., `c7`. The supplied `degree` will
+    specify how many of these are actual variable parameters. This uses
+    :numpydoc:`polynomial.chebyshev.chebval` for its calculation of the polynomial.
+    """
+
+    MAX_DEGREE = 7
+    DEGREE_ERR = "degree must be an integer less than %d."
+
+    valid_forms = (0, 1, 2, 3, 4, 5, 6, 7)
+
+
+    def __init__(self, degree=7, independent_vars=['x'], prefix='',
+                 nan_policy='raise', **kwargs):
+        kwargs.update({'prefix': prefix, 'nan_policy': nan_policy,
+                       'independent_vars': independent_vars})
+        if 'form' in kwargs:
+            degree = int(kwargs.pop('form'))
+        if not isinstance(degree, int) or degree > self.MAX_DEGREE:
+            raise TypeError(self.DEGREE_ERR % self.MAX_DEGREE)
+
+        self.poly_degree = degree
+        pnames = ['c%i' % (i) for i in range(degree + 1)]
+        kwargs['param_names'] = pnames
+
+        def cheby_poly(x, c0=0, c1=0, c2=0, c3=0, c4=0, c5=0, c6=0, c7=0):
+            return np.polynomial.chebyshev.chebval(x, [c0,c1,c2,c3,c4,c5,c6,c7])
+
+        super().__init__(cheby_poly, **kwargs)
+
+
+    def guess(self, data, x=None, **kwargs):
+        """Guess starting values for the parameters of a model.
+            Parameters
+            ----------
+            data : array_like
+                Array of data to use to guess parameter values.
+            **kws : optional
+                Additional keyword arguments, passed to model function.
+            Returns
+            -------
+            params : Parameters
+                Initial, guessed values for the parameters of a Model.
+        """
+        pars = self.make_params()
+        if x is not None:
+            out = np.polynomial.chebyshev.chebfit(x=x, y=data, deg=self.poly_degree)
+            for i, coef in enumerate(out):
+                pars['%sc%i' % (self.prefix, i)].set(value=coef)
+        return update_param_vals(pars, self.prefix, **kwargs)
 
 
 @dataclass
@@ -31,12 +85,13 @@ class SpectrumModelConfig:
         center : confine the location of the peak
         amplitude : confine the AOC of the peak
         type : coule be one of the "GaussianModel", "LorentzianModel", "VoigtModel"
+        use_cheby_poly : use Chebyshev Polynomial instead of normal polynomial if True
         poly_n : the polynomial order of the background, range from 0 to 7
         poly_zero_init : do zero initialize on polynomial term
         peak_window : how many pixel around left and right side of the peak is used to guess the solution
         add_vogit_bg : add a vogit back ground peak
-        vogit_bg_amp_ratio : 
-        center_search_width : float
+        vogit_bg_amp_ratio : deprecated
+        center_search_width : the width of the search region for a peak to migrate during fiting
         
     """
     height : dict
@@ -44,6 +99,7 @@ class SpectrumModelConfig:
     center : dict
     amplitude : dict
     type : list
+    use_cheby_poly : bool
     poly_n : int
     poly_zero_init : bool
     peak_window : int
@@ -71,7 +127,16 @@ class SpectrumModel:
         self.result = result
     
     @classmethod
-    def from_peaks(cls, peaks, peaks_info, spec, config, bg_mask, by="guess"):
+    def from_peaks(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
+        """
+            peaks: peaks index
+            peaks_info: properties of each peak
+            spec: the spectrum to fit
+            config: model's config that provide some guide on how the final model should looks like
+            bg_mask: a binary mask that is one where it is considered as background and zero elsewhere
+            by: method to initialize the peak model. Options are "guess" and "other"
+        """
+
         composite_model = None
         sub_models = []
         params = None
@@ -204,7 +269,11 @@ class SpectrumModel:
         
         # add lm_models.PolynomialModel() for background
         
-        model = lm_models.PolynomialModel(degree=config.poly_n)
+        if config.use_cheby_poly:
+            model = lm_models.PolynomialModel(degree=config.poly_n)
+        else:
+            model = ChebyshevPolynomialModel(degree=config.poly_n)
+
         if config.poly_zero_init:
             guess_params = model.make_params(**{ f"c{i}" : 0 for i in range(config.poly_n+1)})
         else:
@@ -340,46 +409,3 @@ class SpectrumModel:
         fig, gridspec = self.result.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
-
-def fit_single(
-    spec, config,
-    smooth=4,
-    bg_thres=0.05,
-    height=0.01,
-    threshold=0,
-    prominence=0.01,
-    auto_amplitude=False,
-    timeout=3,
-    fit_method="leastsq"
-):
-        
-    finished= False
-
-    # find good initialization
-    preprocessed = spec.remove_background(inplace=False).normalization(False).smooth(smooth, False)
-    peaks, peaksinfo = preprocessed.fit_spectrum_peaks(height=height, threshold=threshold, prominence=prominence)
-    
-    spec.peaks = peaks
-
-    # preprocessed.plot_spectrum(peaks=peaks)
-    bg_mask = preprocessed.spec <= bg_thres
-    
-    # set the maximium by considering the spectrum itself
-    if auto_amplitude:
-        config.amplitude["max"] = maximum_amplitude(spec)
-
-    # fit model
-    for method in ["guess", "other"]:
-        if finished: break
-        try:
-            sm = SpectrumModel.from_peaks(peaks, peaksinfo, spec, config, bg_mask, by=method)
-            output= sm.fit(spec, method=fit_method, timeout=timeout)
-            spec.peak_fit_res = output
-            finished = True
-        except Exception as e:
-            print(f"method: {method} error:{e}") # all methods fails
-
-    if not finished:
-        spec.peak_fit_res = None
-        
-    return finished
