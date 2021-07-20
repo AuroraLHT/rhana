@@ -494,24 +494,27 @@ class Spectrum:
         return out
 
 
-    def save(self, path):
+    def save(self, path, name="spectrum"):
         _exclude = ['sm']
         path = Path(path)
         temps = {k:v for k, v in self.__dict__.items() if k in _exclude }
         
         for k in _exclude: setattr(self, k, None)
 
-        save_pickle(self, path/"XRD.pkl")
+        save_pickle(self, path/f"{name}.pkl")
 
         if "sm" in temps: temps['sm'].save(path)
 
         for k, v in temps.items(): setattr(self, k, v)
     
     @classmethod
-    def load(cls, path):
-        self = load_pickle(path/"XRD.pkl")
+    def load(cls, path, name="spectrum"):
+        self = load_pickle(path/f"{name}.pkl")
         if hasattr(self, "sm"):
-            self.sm = SpectrumModel.load(path)
+            try:
+                self.sm = SpectrumModel.load(path)
+            except Exception as e:
+                print(e)
         return self
 
 @dataclass
