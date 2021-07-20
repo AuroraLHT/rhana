@@ -114,28 +114,19 @@ venv.bak/
 # vscode
 .vscode
 
-# temporary
-README_example.md
-README_pytorch.md
-
-# output
-output/*
-!output/.gitkeep
-
-# demo
-demo/smallholdout
-demo/smallholdout/*
-demo/mp*.csv
+# data
+data
 
 # learner
-cryspnet/learner/*
-!cryspnet/learner/.gitkeep
+learner
 
 # notebook
-Notebook/Notdemo
+notebook/result
+notebook/publication
 
 # temporary files
 tmp/*
+tests/tmp
 
 # README example
 README_example.md
