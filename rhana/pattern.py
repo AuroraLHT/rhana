@@ -69,6 +69,8 @@ class RheedConfig:
         return cls(**dict)
 
 class Rheed:
+    _CMAP = "cividis"
+
     def __init__(self, pattern, min_max_scale=False, standard_norm=False, AOI=None):        
         self.pattern = pattern.copy()
         self.AOI = AOI
@@ -320,9 +322,9 @@ class Rheed:
             )
         return fig
 
-    def plot_pattern(self, ax=None, mp_spectrums=None, cluster_labels=None, clustered_locations=None, dist_flat=None, **fig_kargs):
+    def plot_pattern(self, ax=None, mp_spectrums=None, cluster_labels=None, clustered_locations=None, dist_flat=None, cmap=None, **fig_kargs):
         fig, ax = _create_figure(ax, **fig_kargs)
-        ax.imshow(self.pattern)
+        ax.imshow(self.pattern, cmap=cmap if cmap is not None else self._CMAP)
 
         if mp_spectrums is not None and mp_spectrums.spectrums is not None:
             for i, spec in enumerate(mp_spectrums.spectrums):
@@ -601,7 +603,7 @@ class RheedMask():
             axins.set_xticklabels('')
             axins.set_yticklabels('')
 
-            self.rd.crop(minr-1, minc-1, maxr+1, maxc+1, inplace=False).plot_pattern(axins)
+            self.rd.crop(minr-1, minc-1, maxr+1, maxc+1, inplace=False).plot_pattern(axins, cmap=self.rd._CMAP)
 
         return fig, ax
 
@@ -610,7 +612,7 @@ class RheedMask():
         # image_label_overlay = label2rgb(self.label, image=self.rd.pattern, bg_label=0)
 
         # ax.imshow(image_label_overlay)
-        ax.imshow(self.rd.pattern)
+        self.rd.plot_pattern(ax=ax)
 
         for rid, region in enumerate(self.regions):
             # take regions with large enough areas
@@ -627,7 +629,7 @@ class RheedMask():
         
         return fig, ax
 
-    def plot_peak_dist(self, ax=None):
+    def plot_peak_dist(self, ax=None, dist_text_color="white"):
         fig, ax = _create_figure(ax)
         
         self.rd.plot_pattern(ax=ax)
@@ -641,7 +643,7 @@ class RheedMask():
             )
 
             for p in self.collapses_peaks_ws_flatten[res.peaks_family.astype(int)]:
-                ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color="white")
+                ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
         
         return fig, ax
 
