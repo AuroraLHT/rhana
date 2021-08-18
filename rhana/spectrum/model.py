@@ -410,3 +410,27 @@ class SpectrumModel:
         fig, gridspec = self.result.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
+
+    def find_peak(self, target_peak, error):
+        params = self.sm.result.values
+        best_prefix = None
+        best_dist = np.inf
+        
+        for k, v in params.items():
+            if re.search(f"[LGV]\d+_", k) is None: continue
+                
+            prefix, name = k.split("_")
+            if "center" == name:
+                dist = abs(v-target_peak)
+                if dist < error and dist < best_dist:
+                    best_prefix = prefix
+                    best_dist = dist
+        
+        if best_prefix is not None:
+            return best_prefix, {
+                f"center" : params[f"{best_prefix}_center"],
+                f"amplitude" : params[f"{best_prefix}_amplitude"],
+                f"sigma" : params[f"{best_prefix}_sigma"],
+            }
+        else:
+            return None, None
