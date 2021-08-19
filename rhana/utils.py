@@ -1,6 +1,9 @@
+import time
 import pickle
 import signal
 from pathlib import Path
+import threading
+import multiprocessing
 
 import colorlover as cl
 import numpy as np
@@ -69,3 +72,21 @@ class Timeout:
         signal.alarm(self.seconds)
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
+        
+def timeout_MP(func, args=(), ):
+    l = threading.Lock()
+
+    time_thread = threading.Timer(1.0, lambda l: l.acquire(), args=(l,))
+    # work_thread = threading.Thread(target=_fit, daemon=True)
+    my_proc = multiprocessing.Process(target=func, args=args)
+
+    time_thread.start()
+    my_proc.start()
+
+    while not l.locked():
+        time.sleep(.1)
+    # print("main thread start to terminate")
+    if my_proc.is_alive:
+        # print("kill still running child process")
+        my_proc.terminate()
+    time_thread.join()
