@@ -412,7 +412,7 @@ class SpectrumModel:
         return fig, gridspec
 
     def find_peak(self, target_peak, error):
-        params = self.sm.result.values
+        params = self.result.values
         best_prefix = None
         best_dist = np.inf
         
