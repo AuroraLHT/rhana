@@ -629,7 +629,7 @@ class RheedMask():
         
         return fig, ax
 
-    def plot_peak_dist(self, ax=None, dist_text_color="white"):
+    def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True):
         fig, ax = _create_figure(ax)
         
         self.rd.plot_pattern(ax=ax)
@@ -641,9 +641,9 @@ class RheedMask():
                 alpha=0.5, 
                 color=plt.cm.Set1.colors[i]
             )
-
-            for p in self.collapses_peaks_ws_flatten[res.peaks_family.astype(int)]:
-                ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
+            if show_text:
+                for p in self.collapses_peaks_ws_flatten[res.peaks_family.astype(int)]:
+                    ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
         
         return fig, ax
 
