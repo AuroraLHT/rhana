@@ -106,3 +106,20 @@ exp_cons = {
     "IT029": (1e-2, 300),
     "IT030": (1e-5, 300),
 }
+
+pyroT2caliT = {
+    300:383,
+    400:524,
+    450:600,
+    500:666,
+    550:734,
+    600:805,
+    700:927,
+    800:1048,
+}
+
+cali_exp_cons= {}
+for name, con in exp_cons.items():
+    cali_exp_cons[name] = (con[0], pyroT2caliT[con[1]])
+
+ 
