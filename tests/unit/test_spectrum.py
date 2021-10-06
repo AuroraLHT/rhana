@@ -51,7 +51,7 @@ class TestSpectrum(unittest.TestCase):
             center_search_width=1,
         )
 
-        sm = SpectrumModel.from_peaks(peaks, peaksinfo, self.spec, config, bg_mask, by="guess")
+        sm = SpectrumModel.from_peak_finding(peaks, peaksinfo, self.spec, config, bg_mask, by="guess")
         output = sm.fit(self.spec, method="leastsq")
 
         self.spec.sm = sm
