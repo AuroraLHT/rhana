@@ -479,7 +479,7 @@ class RheedMask():
 
     def get_close_region(self, x, y):
         centroids = np.stack([ self._get_region_centroid(region) for region in self.regions ], axis=0)
-        dists = np.linalg.norm(centroids - np.array([x,y]))
+        dists = np.linalg.norm(centroids - np.array([x,y]), axis=1)
         i = np.argmin(dists)
         return self.regions[i], i
     
