@@ -282,8 +282,8 @@ class SpectrumModel:
                 right = int(min(len(bg_mask)-1, c+w))
                 bg_mask[left:right] = False
 
-        peaks = [ round(c) for c in centers ]
-        peak_xs = [ spec.ws[round(c)] for c in centers ]
+        peaks = [ int(round(c)) for c in centers ]
+        peak_xs = [ spec.ws[int(round(c))] for c in centers ]
         # this scaler assume the spacing in ws is uniform
         scaler = (spec.ws.max() - spec.ws.min()) / len(spec.ws)
         peak_widths = FWHMs * scaler
