@@ -108,6 +108,7 @@ class SpectrumModelConfig:
     vogit_bg_amp_ratio : float
     center_search_width : float
 
+
 class SpectrumModel:
     """
         Reference 
@@ -121,14 +122,276 @@ class SpectrumModel:
         "VoigtModel":"V{}_"
     }
     
+
     def __init__(self, model, sub_models, params, result=None):
         self.sub_models = sub_models # list of lmfit models
         self.model = model
         self.params = params
         self.result = result
+
+
+    @staticmethod
+    def get_max_amp(spectrum):
+        """
+            use intergral (by trapezoidal rule) of signal of a whole spectrum to get the maximum value of amplitude of a profile
+            Arguments:
+                spectrum : A spectrum object
+        """
+        return float(np.trapz(spectrum.spec, spectrum.ws))
+
+    @staticmethod
+    def _update(model, model_params, params, sub_models, composite_model):
+        if isinstance(model_params, dict):
+            model_params = model.make_params(**model_params)
+        else:
+            model_params = model.make_params(**params)
+            
+        if params is None:
+            params = model_params
+        else:
+            params.update(model_params)
+        # display(params)
+        if composite_model is None:
+            composite_model = model
+        else:
+            composite_model = composite_model + model            
+            
+        sub_models.append(model)
+    
+        return params, sub_models, composite_model
+    
+
+    @staticmethod
+    def _create_poly_model(spec, bg_mask, config):        
+        if config.use_cheby_poly:
+            model = lm_models.PolynomialModel(degree=config.poly_n)
+        else:
+            model = ChebyshevPolynomialModel(degree=config.poly_n)
+
+        if config.poly_zero_init:
+            guess_params = model.make_params(**{ f"c{i}" : 0 for i in range(config.poly_n+1)})
+        else:
+            guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
+
+        return model, guess_params
+
+
+    @staticmethod
+    def _create_profile_model(peak, peak_x, peak_width, peak_height, spec, config, by, prefix):
+        p, p_x, p_w, p_h = int(peak), float(peak_x), float(peak_width), float(peak_height)
+        try:
+            if isinstance(config.type, str):
+                m_type = config.type
+                model = getattr(lm_models, m_type)(prefix=prefix)
+            elif isinstance(config.type, type):
+                m_type = config.type.__name__
+                model = config.type(prefix=prefix)
+        except Exception as e:
+            raise NotImplementedError(f'model {config.type} not implemented yet. Error {e}')
+        
+        
+        center = dict(config.center)
+        if config.center_search_width is not None:
+            center['min'] = p_x - config.center_search_width / 2
+            center['max'] = p_x + config.center_search_width / 2
+        
+        model.set_param_hint('sigma', **config.sigma)
+        model.set_param_hint('center', **center)
+        model.set_param_hint('height', **config.height)
+        model.set_param_hint('amplitude', **config.amplitude)
+        
+        if by == "guess":
+            params = model.guess(
+                spec.spec[p-config.peak_window:p+config.peak_window],
+                spec.ws[p-config.peak_window:p+config.peak_window]
+            )                    
+        else:
+            params = SpectrumModel._profile_params_from_peaks(m_type, prefix, p_x, p_w, p_h, config)
+    
+        return model, params
+    
+
+    @staticmethod
+    def _profile_params_from_peaks(type:str, prefix:str, p_x:float, p_w:float, p_h:float, config:SpectrumModelConfig):
+        """[summary]
+
+        Args:
+            type (str): profile type [GaussianModel, LorentzianModel, VoigtModel]
+            prefix (str): prefix that add to the beginning of the param name
+            p (float): peak center location
+            p_w (float): peak fwhm
+            p_h (float): peak height
+            config ([SpectrumModelConfig]): SpectrumModelConfig by words
+
+        Raises:
+            NotImplementedError: [description]
+
+        Returns:
+            [dict]: parameter for that profile model
+        """
+        if type == "GaussianModel":
+            # default guess is horrible!! do not use guess()
+
+            center = p_x            
+            sigma = p_w / 2.355
+            amplitude = float(p_h * (sigma * np.sqrt(2*np.pi)))
+
+            profile_params = {
+                f"{prefix}center": center,
+                f"{prefix}amplitude": amplitude,
+                f"{prefix}sigma": sigma
+            }
+        elif type == "LorentzianModel":
+            center = p_x
+            sigma = p_w / 2
+            amplitude = float(p_h * (sigma * np.pi))
+
+            profile_params = {
+                f"{prefix}center": center,
+                f"{prefix}amplitude": amplitude,
+                f"{prefix}sigma": sigma
+            }
+
+        elif type == "VoigtModel":
+            center = p_x
+            sigma = p_w / 3.6013
+            amplitude = float(p_h * (sigma * np.sqrt(2*np.pi)))
+
+            profile_params = {
+                f"{prefix}center": center,
+                f"{prefix}amplitude": amplitude,
+                f"{prefix}sigma": sigma
+            }
+        else:
+            raise NotImplementedError("Unknown type: {type}")
+
+        return profile_params        
+    
     
     @classmethod
-    def from_peaks(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
+    def from_nn_detection(cls, detections, spec, config:SpectrumModelConfig, bg_mask:np.ndarray=None, by:str="other"):
+        detections = detections.to('cpu').numpy()
+        centers = detections[:, 0]
+        FWHMs = detections[:, 1] / 2
+
+        if bg_mask is None:
+            bg_mask = np.ones_like(spec.spec, dtype=bool)
+            for c, w in zip(centers, FWHMs):
+                w = w * 3
+                left = int(max(0, c-w))
+                right = int(min(len(bg_mask)-1, c+w))
+                bg_mask[left:right] = False
+
+        peaks = [ round(c) for c in centers ]
+        peak_xs = [ spec.ws[round(c)] for c in centers ]
+        # this scaler assume the spacing in ws is uniform
+        scaler = (spec.ws.max() - spec.ws.min()) / len(spec.ws)
+        peak_widths = FWHMs * scaler
+        peak_heights = [ spec.spec[int(c)] for c in centers ]
+
+        return cls.from_peaks(
+            peaks,
+            peak_xs,
+            peak_widths,
+            peak_heights,
+            spec=spec, 
+            config=config, 
+            bg_mask=bg_mask,
+            by=by
+        )
+
+
+    @classmethod
+    def from_peak_finding(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
+        """
+            peaks: peaks index
+            peaks_info: properties of each peak
+            spec: the spectrum to fit
+            config: model's config that provide some guide on how the final model should looks like
+            bg_mask: a binary mask that is one where it is considered as background and zero elsewhere
+            by: method to initialize the peak model. Options are "guess" and "other"
+        """
+        
+        def _guess_FWHM(spec, peaks, peak_heights, config):
+            window = config.peak_window
+            wms = peak_heights / 2
+            
+            above_wm = [ spec.spec[max(p-window,0) : p+window ] < wm for p, wm in zip(peaks, wms) ]
+            x = [ spec.ws[max(p-window,0) : p+window ] for p in peaks ]
+            
+            peak_lefts = []
+            peak_rights = []
+            for i in range(len(above_wm)):
+                above_wm_int = np.where(~above_wm[i])[0]
+                if len(above_wm_int)>0:
+                    left = above_wm_int.min()
+                    right = above_wm_int.max()
+                else:
+                    left = 0
+                    right = len(x[i])-1
+                    
+                peak_lefts.append(x[i][left])
+                peak_rights.append(x[i][right])
+                
+            peak_widths = np.array(peak_rights) - np.array(peak_lefts)
+            return peak_widths
+            
+        peak_heights = spec.spec[peaks]
+        peak_xs = spec.ws[peaks]
+        peak_widths = _guess_FWHM(spec, peaks, peak_heights, config)
+        return cls.from_peaks(peaks, peak_xs, peak_widths, peak_heights, spec, config=config, bg_mask=bg_mask, by=by)
+        
+
+    @classmethod
+    def from_peaks(cls, peaks, peak_xs, peak_widths, peak_heights, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
+        composite_model = None
+        sub_models = []
+        params = None
+
+        for i, (p, p_x, p_w, p_h,) in enumerate(zip(peaks, peak_xs, peak_widths, peak_heights)):
+            if isinstance(config.type, str):
+                m_type = config.type
+                prefix = cls._model_prefix[m_type].format(i)
+            elif isinstance(config.type, type):
+                m_type = config.type.__name__
+                prefix = cls._model_prefix[m_type].format(i)
+
+            model, init_params = cls._create_profile_model(
+                peak = p,
+                peak_x = p_x,
+                peak_width = p_w,
+                peak_height = p_h,
+                spec = spec,
+                config = config,
+                by = by,
+                prefix = prefix
+            )
+            params, sub_models, composite_model = cls._update(model, init_params, params, sub_models, composite_model)
+
+        
+        # add lm_models.PolynomialModel() for background
+        model, init_params = cls._create_poly_model(spec, bg_mask, config)
+        params, sub_models, composite_model = cls._update(model, init_params, params, sub_models, composite_model)
+        
+        # add vogit background? for liquid phase disentanglement -> big spread that fit nicely by vogit!!!
+        if config.add_vogit_bg:
+            model = lm_models.VoigtModel(prefix="Lb0_")
+            
+            model.set_param_hint('center', **config.center)
+            model.set_param_hint('height', **config.height)
+            model.set_param_hint('amplitude', **config.amplitude)
+            
+            # guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
+            guess_params = model.guess(spec.spec, spec.ws)
+            # guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio
+    
+            params, sub_models, composite_model = cls._update(model, guess_params, params, sub_models, composite_model)
+        
+        return cls(composite_model, sub_models, params)    
+
+    
+    @classmethod
+    def from_peaks_old(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
         """
             peaks: peaks index
             peaks_info: properties of each peak
@@ -142,25 +405,6 @@ class SpectrumModel:
         sub_models = []
         params = None
         
-        def _update(model, model_params, params, sub_models, composite_model):
-            if isinstance(model_params, dict):
-                model_params = model.make_params(**model_params)
-            else:
-                model_params = model.make_params(**params)
-                
-            if params is None:
-                params = model_params
-            else:
-                params.update(model_params)
-            # display(params)
-            if composite_model is None:
-                composite_model = model
-            else:
-                composite_model = composite_model + model            
-             
-            sub_models.append(model)
-        
-            return params, sub_models, composite_model
         
         def _guess_FWHM(spec, peaks, peak_heights, config):
             window = config.peak_window
@@ -261,11 +505,11 @@ class SpectrumModel:
                     spec.ws[p-config.peak_window:p+config.peak_window]
                 )
             
-                params, sub_models, composite_model = _update(model,guess_params, params, sub_models, composite_model)
+                params, sub_models, composite_model = cls._update(model, guess_params, params, sub_models, composite_model)
                 
             else:
-                default_params = _default_params_from_peaks(m_type, prefix, p_x, p_w, p_h, config)
-                params, sub_models, composite_model = _update(model,default_params, params, sub_models, composite_model)
+                default_params = cls._profile_params_from_peaks(m_type, prefix, p_x, p_w, p_h, config)
+                params, sub_models, composite_model = cls._update(model, default_params, params, sub_models, composite_model)
 
         
         # add lm_models.PolynomialModel() for background
@@ -280,7 +524,7 @@ class SpectrumModel:
         else:
             guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
 
-        params, sub_models, composite_model = _update(model, guess_params, params, sub_models, composite_model)
+        params, sub_models, composite_model = cls._update(model, guess_params, params, sub_models, composite_model)
         
         # add vogit background? for liquid phase disentanglement -> big spread that fit nicely by vogit!!!
         if config.add_vogit_bg:
@@ -294,12 +538,17 @@ class SpectrumModel:
             guess_params = model.guess(spec.spec, spec.ws)
             # guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio
     
-            params, sub_models, composite_model = _update(model, guess_params, params, sub_models, composite_model)
+            params, sub_models, composite_model = cls._update(model, guess_params, params, sub_models, composite_model)
         
         return cls(composite_model, sub_models, params)    
-        
-    def modify_params(self, model_idx, **kargs):
-        model = self.sub_models[model_idx]
+
+
+    def modify_params(self, model_idx=None, model=None, **kargs):
+        if model_idx is not None:
+            model = self.sub_models[model_idx]
+        elif model_idx is None and model is None:
+            raise ValueError("Either model_idx or model should be not None value")
+
         for param, options in kargs.items():
             model.set_param_hint(param, **options)
             
@@ -307,7 +556,8 @@ class SpectrumModel:
         self.params.update(params)
         
         return self
-    
+
+
     def fit(self, spec, timeout=5, **kargs):
         def _fit():
             output = self.model.fit(
@@ -325,6 +575,7 @@ class SpectrumModel:
             self.result = _fit()
         return self.result
     
+
     def plot_component(self, spec, xlabel=None, ylabel=None, ax=None, **kargs):
         fig, ax = _create_figure(ax=ax, **kargs)
         ax.scatter(spec.ws, spec.spec, s=4)
@@ -340,6 +591,7 @@ class SpectrumModel:
 
         return fig, ax
 
+
     def is_fit_fail(self, thres_err=100, thres_fwhm=1, no_rela_okay=False):
         # should look into relative err see below's cell of how to get it from result
         if self.has_no_rela_err(self.result):
@@ -348,6 +600,7 @@ class SpectrumModel:
             h_err = self.has_high_rela_err(self.result, thres_err)
             h_fwhm = self.has_high_fwhm(self.result, thres_fwhm)
             return  h_err or h_fwhm
+
 
     @staticmethod
     def has_high_fwhm(peak_fit_res, thres=1):
@@ -359,7 +612,8 @@ class SpectrumModel:
                 elif v.value > thres:
                     return True
         return False
-    
+
+
     @staticmethod
     def has_no_rela_err(peak_fit_res):
         if peak_fit_res is None: return True
@@ -369,6 +623,7 @@ class SpectrumModel:
             if v.stderr is None:
                 return True
         return False
+
 
     @staticmethod
     def has_high_rela_err(peak_fit_res, thres=100):
@@ -381,6 +636,7 @@ class SpectrumModel:
                 if relative_err > thres:
                     return True
         return False
+
 
     def save(self, path): 
         path = Path(path)
@@ -406,10 +662,12 @@ class SpectrumModel:
         params = load_pickle(params_path)
         return cls(model, [], params)
     
+
     def plot_fit(self, spec, **kargs):
         fig, gridspec = self.result.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
+
 
     def find_peak(self, target_peak, error):
         params = self.result.values
