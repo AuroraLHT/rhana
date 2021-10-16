@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 
 import numpy as np
+from scipy.special import wofz
 
 from lmfit.model import Parameters, Parameter
 from lmfit.models import Model, update_param_vals
@@ -164,10 +165,10 @@ class SpectrumModel:
     @staticmethod
     def _create_poly_model(spec, bg_mask, config):        
         if config.use_cheby_poly:
-            model = lm_models.PolynomialModel(degree=config.poly_n)
-        else:
             model = ChebyshevPolynomialModel(degree=config.poly_n)
-
+        else:
+            model = lm_models.PolynomialModel(degree=config.poly_n)
+            
         if config.poly_zero_init:
             guess_params = model.make_params(**{ f"c{i}" : 0 for i in range(config.poly_n+1)})
         else:
@@ -255,7 +256,9 @@ class SpectrumModel:
         elif type == "VoigtModel":
             center = p_x
             sigma = p_w / 3.6013
-            amplitude = float(p_h * (sigma * np.sqrt(2*np.pi)))
+            gamma = sigma
+            # height = (amplitude/(max(1e-15, sigma*np.sqrt(2*np.pi)))) * wofz((1j*gamma) / (max(1e-15, sigma*np.sqrt(2)))).real
+            amplitude = p_h * sigma*np.sqrt(2*np.pi) / wofz((1j*gamma)/(max(1e-15, sigma*np.sqrt(2)))).real                        
 
             profile_params = {
                 f"{prefix}center": center,
@@ -282,12 +285,16 @@ class SpectrumModel:
                 right = int(min(len(bg_mask)-1, c+w))
                 bg_mask[left:right] = False
 
-        peaks = [ int(round(c)) for c in centers ]
-        peak_xs = [ spec.ws[int(round(c))] for c in centers ]
+        w_max = spec.ws.max()
+        w_min = spec.ws.min()
+        p_max = len(spec.ws) - 1
+        
+        peaks = [ min(p_max, max(0, int(round(c)) ) ) for c in centers ]
+        peak_xs = [ spec.ws[p] for p in peaks ]
         # this scaler assume the spacing in ws is uniform
-        scaler = (spec.ws.max() - spec.ws.min()) / len(spec.ws)
+        scaler = (w_max - w_min) / len(spec.ws)
         peak_widths = FWHMs * scaler
-        peak_heights = [ spec.spec[int(c)] for c in centers ]
+        peak_heights = [ spec.spec[p] for p in peaks ]
 
         return cls.from_peaks(
             peaks,
