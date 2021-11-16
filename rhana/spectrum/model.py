@@ -21,6 +21,7 @@ def maximum_amplitude(spectrum):
     # intergral by trapezoidal rule
     return float(np.trapz(spectrum.spec, spectrum.ws))
 
+
 class ChebyshevPolynomialModel(Model):
     r"""A polynomial model with up to 7 Parameters, specified by `degree`.
     .. math::
@@ -139,6 +140,7 @@ class SpectrumModel:
                 spectrum : A spectrum object
         """
         return float(np.trapz(spectrum.spec, spectrum.ws))
+
 
     @staticmethod
     def _update(model, model_params, params, sub_models, composite_model):
@@ -273,6 +275,16 @@ class SpectrumModel:
     
     @classmethod
     def from_nn_detection(cls, detections, spec, config:SpectrumModelConfig, bg_mask:np.ndarray=None, by:str="other"):
+        """
+            Create a spectrum Model from YOLOdetector output.
+
+            Arguments:
+                detections : output from YOLOdetector
+                spec : spectrum
+                config : SpectrumModelConfig
+                bg_mask : background mask, would generate one using the detections by default
+                by : initilization method, has "other" or "guess". recommand using the "other"
+        """
         detections = detections.to('cpu').numpy()
         centers = detections[:, 0]
         FWHMs = detections[:, 1] / 2
@@ -311,12 +323,15 @@ class SpectrumModel:
     @classmethod
     def from_peak_finding(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
         """
-            peaks: peaks index
-            peaks_info: properties of each peak
-            spec: the spectrum to fit
-            config: model's config that provide some guide on how the final model should looks like
-            bg_mask: a binary mask that is one where it is considered as background and zero elsewhere
-            by: method to initialize the peak model. Options are "guess" and "other"
+            Create a spectrum Model from peak_finding algorithm
+
+            Arguments:
+                peaks: peaks index
+                peaks_info: properties of each peak
+                spec: the spectrum to fit
+                config: model's config that provide some guide on how the final model should looks like
+                bg_mask: a binary mask that is one where it is considered as background and zero elsewhere
+                by: method to initialize the peak model. Options are "guess" and "other"
         """
         
         def _guess_FWHM(spec, peaks, peak_heights, config):
@@ -400,6 +415,8 @@ class SpectrumModel:
     @classmethod
     def from_peaks_old(cls, peaks, peaks_info, spec, config:SpectrumModelConfig, bg_mask:np.ndarray, by:str="guess"):
         """
+            Old code. Would be deprecated in the future
+
             peaks: peaks index
             peaks_info: properties of each peak
             spec: the spectrum to fit
@@ -566,6 +583,13 @@ class SpectrumModel:
 
 
     def fit(self, spec, timeout=5, **kargs):
+        """
+            Fit the model given a spectrum
+            Arguments:
+                spec : the input spectrum
+                timeout : timeout in second, only works in Linux environment
+                **kargs : other argument that passed to the optimizer
+        """
         def _fit():
             output = self.model.fit(
                 data = spec.spec,
@@ -584,6 +608,16 @@ class SpectrumModel:
     
 
     def plot_component(self, spec, xlabel=None, ylabel=None, ax=None, **kargs):
+        """
+            Plot the fitted model's component
+            
+            Arguments:
+                spec : spectrum
+                xlabel : x axis title
+                ylabel : y axis title
+                ax : plot axis, would create one if not given
+        """
+
         fig, ax = _create_figure(ax=ax, **kargs)
         ax.scatter(spec.ws, spec.spec, s=4)
         components = self.result.eval_components(x=spec.ws)
@@ -671,12 +705,29 @@ class SpectrumModel:
     
 
     def plot_fit(self, spec, **kargs):
+        """
+            Plot the fitted model's predicted value with residual
+            
+            TODO : replace the result plot with our own code
+
+            Arguments:
+                spec : spectrum
+        """
+        
         fig, gridspec = self.result.plot(data_kws={'markersize': 1}, **kargs)
         fig.axes[0].title.set_text("Fit and Residual")
         return fig, gridspec
 
 
     def find_peak(self, target_peak, error):
+        """
+            Get the closest vogit peak to the input peak location
+
+            Arguments:
+                target_peak : target peak location in spectrum.ws space
+                error : maximum tolerant of the l1 different betweeen target_peak and voigt peak's center 
+        """
+
         params = self.result.values
         best_prefix = None
         best_dist = np.inf
