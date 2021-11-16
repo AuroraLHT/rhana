@@ -1,5 +1,5 @@
 from typing import List
-from rhana.pattern import RheedMask
+from rhana.pattern import RheedConfig, RheedMask
 from rhana.utils import _CM_rgb
 
 from sklearn.cluster import DBSCAN
@@ -45,10 +45,11 @@ class DBSCANDistanceCluster:
         return labels
 
 class RHEEDMaskDistancePhaser:
-    def __init__(self, rdms:List[RheedMask]):
+    def __init__(self, rdms:List[RheedMask], convert_dist=False):
         # assume rdms already has distance computed
         self.rdms = rdms
-
+        self.convert_dist = convert_dist
+        
     def _get_all_distance(self):
         self.all_peak_dists = []
 
@@ -56,7 +57,8 @@ class RHEEDMaskDistancePhaser:
             for j, res in enumerate(rdm.collapses_peaks_flatten_ana_res):
                 # the single item of all_peak_dists is a tuple like 
                 # ((index_of_rdm in rdms, index of ana inana_res), average distance of that ana)
-                self.all_peak_dists.append( ((i, j), res.avg_dist) )
+                peak_dist = res.avg_dist if not self.convert_dist else rdm.rd.config.hdist2G(res.avg_dist)
+                self.all_peak_dists.append( ((i, j), peak_dist) )
 
         self.all_peak_dists_values = np.array(list(map(lambda x: x[1], self.all_peak_dists)))
 
