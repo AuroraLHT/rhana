@@ -67,11 +67,25 @@ class RheedConfig:
     @classmethod
     def from_dict(cls, dict):
         return cls(**dict)
+    
+    def hdist2G(self, dist):
+        """
+            convert horizontal distance 2 G
+            dist : horizontal distance is in pixel
+            return dG is in nm^-1
+        """
+        real_dist = self.pixel_real * dist
+        # print(real_dist)
+        k0 = 2*np.pi/self.wave_length
+        # print(k0)
+        r = (self.sub_ccd_dist/real_dist)**2
+        dG = k0 / np.sqrt( r + 1 ) * 1e-6
+        return dG
 
 class Rheed:
     _CMAP = "cividis"
 
-    def __init__(self, pattern, min_max_scale=False, standard_norm=False, AOI=None):        
+    def __init__(self, pattern, min_max_scale=False, standard_norm=False, AOI=None, config:RheedConfig=None):
         self.pattern = pattern.copy()
         self.AOI = AOI
         if AOI is not None:
@@ -82,6 +96,7 @@ class Rheed:
             self.standard_norm()
         if min_max_scale:
             self.min_max_scale()
+        self.config = config
         
     @classmethod
     def from_kashiwa(cls, path, contain_hw=True, min_max_scale=False, standard_norm=False, log=False, use_mask=True, rotate=0):
@@ -106,13 +121,13 @@ class Rheed:
         return cls.from_multi(patterns, AOI=~ksw._APMASK)
 
     @classmethod
-    def from_image(cls, path, rotate=0, crop_box=None, min_max_scale=False, standard_norm=False,  AOI=None):
+    def from_image(cls, path, rotate=0, crop_box=None, min_max_scale=False, standard_norm=False,  AOI=None, config=None):
         img = Image.open(path)
         if rotate != 0 :
             img = img.rotate(rotate)
         if crop_box is not None:
             img = img.crop(crop_box)
-        return cls(np.array(img)/255, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI)
+        return cls(np.array(img)/255, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
     def mean_clip(self, alpha=1, inplace=True):
         if self.AOI is not None:
