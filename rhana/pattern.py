@@ -99,7 +99,7 @@ class Rheed:
         self.config = config
         
     @classmethod
-    def from_kashiwa(cls, path, contain_hw=True, min_max_scale=False, standard_norm=False, log=False, use_mask=True, rotate=0):
+    def from_kashiwa(cls, path, contain_hw=True, min_max_scale=False, standard_norm=False, log=False, use_mask=True, rotate=0, config:RheedConfig=None):
         if contain_hw:
             pattern = ksw.decode_rheed(path)
         else:
@@ -109,7 +109,7 @@ class Rheed:
         pattern = np.log10(pattern) if log else pattern / ksw._MAX_INT_KASHIWA
         if rotate != 0: pattern = skim_rotate(pattern, rotate)
 
-        return cls(pattern, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI )
+        return cls(pattern, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
     @classmethod
     def from_multi(cls, patterns, min_max_scale=False, standard_norm=False, AOI=None):
@@ -453,7 +453,7 @@ class RheedMask():
                     cs.remove_background()
                 except np.linalg.LinAlgError as e:
                     warnings.warn(f"Encounter LinAlgError when doing background removal! {e}")
-            if scale: cs.normalization()
+            if scale: cs.normalize()
             if smooth: cs.smooth()
         return self
 
