@@ -178,7 +178,7 @@ class Spectrum:
             copy the spectrum object
         """
         
-        return self._update_spectrum(self, self.spec[...], self.ws[...], inplace=False)
+        return self._update_spectrum(self.spec[...], self.ws[...], inplace=False)
 
     def _update_spectrum(self, spec, ws, inplace=True, **kargs):
         """
