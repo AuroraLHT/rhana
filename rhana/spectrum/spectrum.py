@@ -173,6 +173,13 @@ class Spectrum:
     spec: np.ndarray
     ws: np.ndarray
 
+    def copy(self):
+        """
+            copy the spectrum object
+        """
+        
+        return self._update_spectrum(self, self.spec[...], self.ws[...], inplace=False)
+
     def _update_spectrum(self, spec, ws, inplace=True, **kargs):
         """
             do an update in the current spectrum's field or create a
@@ -218,7 +225,7 @@ class Spectrum:
         return self._update_spectrum(spec=new_spec, ws=new_ws, inplace=inplace)
 
 
-    def normalization(self, min_v=None, max_v=None, inplace=True):
+    def normalize(self, min_v=None, max_v=None, inplace=True):
         """
             normalize the spectrum by min, max value
             if min max is not given then it would be computed from the given spectrum
@@ -226,7 +233,7 @@ class Spectrum:
             Arguments:
                 min_v : minimum value
                 max_v : maximum value
-                inplace : if true update current object else return new object
+                inplace : if true update current object else return a new object
         """
         
         _min = self.spec.min() if min_v is None else min_v
@@ -234,6 +241,18 @@ class Spectrum:
         
         nspec = (self.spec - _min) / (_max - _min + 1e-5)
 
+        return self._update_spectrum(nspec, self.ws, inplace=inplace)
+
+    def denormalize(self, min_v, max_v, inplace=True):
+        """
+        Transform the normalized from into the ususal form
+
+        Args:
+            min_v (float): minimum value
+            max_v ([float): maximum value
+            inplace (bool, optional): if true, update the current object else reuturn a new object. Defaults to True.
+        """
+        nspec = self.spec * (max_v - min_v) + min_v
         return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
     def scale(self, scalor, inplace=True):
