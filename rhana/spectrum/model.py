@@ -584,7 +584,7 @@ class SpectrumModel:
 
     def fit(self, spec, timeout=5, **kargs):
         """
-            Fit the model given a spectrum
+            Fit the model given a spectrum and parameters initilized from various methods
             Arguments:
                 spec : the input spectrum
                 timeout : timeout in second, only works in Linux environment
@@ -606,6 +606,12 @@ class SpectrumModel:
             self.result = _fit()
         return self.result
     
+    def confirm_fit(self):
+        """
+            Update the model params using the fitted parameters
+        """
+        if self.result is not None:
+            self.params = self.result.params
 
     def plot_component(self, spec, xlabel=None, ylabel=None, ax=None, **kargs):
         """
