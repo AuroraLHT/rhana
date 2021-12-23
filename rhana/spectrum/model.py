@@ -2,8 +2,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import signal
-
 import numpy as np
 from scipy.special import wofz
 
@@ -15,6 +13,8 @@ from lmfit.model import save_modelresult, save_model, load_model
 from rhana.utils import _create_figure
 from rhana.utils import Timeout
 from rhana.utils import load_pickle, save_pickle
+
+from typing import Optional, Union, Tuple, List, Dict, Callable
 
 
 def maximum_amplitude(spectrum):
@@ -77,26 +77,29 @@ class ChebyshevPolynomialModel(Model):
         return update_param_vals(pars, self.prefix, **kwargs)
 
 
+_doc_spectrummodelconfig = """
+    All parameter with dict type follow this convention
+    {"value":..., "vary":..., "min":..., "max":..., "expr":...}
+    
+    height (dict): confine the height of the peak
+    sigma (dict): confine the width of the peak
+    center (dict): confine the location of the peak
+    amplitude (dict): confine the AOC of the peak
+    type (list): coule be one of the "GaussianModel", "LorentzianModel", "VoigtModel"
+    use_cheby_poly (bool): use Chebyshev Polynomial instead of normal polynomial if True
+    poly_n (int): the polynomial order of the background, range from 0 to 7
+    poly_zero_init (bool): do zero initialize on polynomial term
+    peak_window (int): how many pixel around left and right side of the peak is used to guess the solution
+    add_vogit_bg (bool): deprecated, add a vogit back ground peak
+    vogit_bg_amp_ratio (float): deprecated,
+    center_search_width (float): the width of the search region for a peak to migrate during fiting
+"""
+
+
 @dataclass
 class SpectrumModelConfig:
-    """
-        all parameter with dict type follow this convention
-        {"value":..., "vary":..., "min":..., "max":..., "expr":...}
-        
-        height : confine the height of the peak
-        sigma : confine the width of the peak
-        center : confine the location of the peak
-        amplitude : confine the AOC of the peak
-        type : coule be one of the "GaussianModel", "LorentzianModel", "VoigtModel"
-        use_cheby_poly : use Chebyshev Polynomial instead of normal polynomial if True
-        poly_n : the polynomial order of the background, range from 0 to 7
-        poly_zero_init : do zero initialize on polynomial term
-        peak_window : how many pixel around left and right side of the peak is used to guess the solution
-        add_vogit_bg : add a vogit back ground peak
-        vogit_bg_amp_ratio : deprecated
-        center_search_width : the width of the search region for a peak to migrate during fiting
-        
-    """
+    f"""{_doc_spectrummodelconfig}"""
+
     height : dict
     sigma : dict
     center : dict
@@ -109,6 +112,44 @@ class SpectrumModelConfig:
     add_vogit_bg : bool
     vogit_bg_amp_ratio : float
     center_search_width : float
+
+
+_doc_funcspectrummodelconfig =\
+"""
+    Same configuration as SpectrumModelConfig but each parameters could be a value or 
+    a callable. Use .evaluate to create an actual SpectrumModelConfig.
+
+""" + _doc_spectrummodelconfig
+
+
+@dataclass
+class FuncSpectrumModelConfig:
+    f"""{_doc_funcspectrummodelconfig}"""
+
+    height : Union[Dict, Callable[[], Dict]]
+    sigma : Union[Dict, Callable[[], Dict]]
+    center : Union[Dict, Callable[[], Dict]]
+    amplitude : Union[Dict, Callable[[], Dict]]
+    type : Union[List, Callable[[], List]]
+    use_cheby_poly : Union[bool, Callable[[], bool]]
+    poly_n : Union[int, Callable[[], int]]
+    poly_zero_init : Union[bool, Callable[[], bool]]
+    peak_window : Union[int, Callable[[], int]]
+    add_vogit_bg : Union[bool, Callable[[], bool]]
+    vogit_bg_amp_ratio : Union[float, Callable[[], float]]
+    center_search_width : Union[float, Callable[[], float]]
+    
+    def evaluate(self) -> SpectrumModelConfig:
+        evaled = {}
+        for k, v in self.__dict__.items():
+            evaled[k] = self._eval_component(v)
+        return SpectrumModelConfig(**evaled)
+    
+    def _eval_component(self, component):
+        if callable(component):
+            return component()
+        else:
+            return component
 
 
 class SpectrumModel:
@@ -395,7 +436,7 @@ class SpectrumModel:
         model, init_params = cls._create_poly_model(spec, bg_mask, config)
         params, sub_models, composite_model = cls._update(model, init_params, params, sub_models, composite_model)
         
-        # add vogit background? for liquid phase disentanglement -> big spread that fit nicely by vogit!!!
+        # add vogit background? for liquid/amorphous phase disentanglement -> a big spread that fit nicely by vogit!!!
         if config.add_vogit_bg:
             model = lm_models.VoigtModel(prefix="Lb0_")
             
@@ -405,8 +446,8 @@ class SpectrumModel:
             
             # guess_params = model.guess(spec.spec[bg_mask], spec.ws[bg_mask])
             guess_params = model.guess(spec.spec, spec.ws)
-            # guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio
-    
+
+            # guess_params['Lb0_amplitude'].value = config.amplitude['max'] * config.vogit_bg_amp_ratio    
             params, sub_models, composite_model = cls._update(model, guess_params, params, sub_models, composite_model)
         
         return cls(composite_model, sub_models, params)    
