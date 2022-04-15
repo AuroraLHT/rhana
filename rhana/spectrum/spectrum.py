@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, fields
 from collections import namedtuple
 
 import numpy as np
+
 from scipy.signal import savgol_filter
 from scipy.ndimage.filters import gaussian_filter1d
 from scipy.optimize import curve_fit
@@ -32,14 +33,19 @@ def multi_gaussian(x, *pars):
     return summation
 
 
-def get_peaks_distance(peaks, peaks_w, full=False, polar=True):
+def get_peaks_distance(peaks_idx:List[int], peaks_w:List[float], full=False, polar=True):
     """
-        Given peaks of a list of spectrum, this function calculate the
-        inter-peak distance for all peaks in one spectrum
-        
-        Argument:
-            peaks : peaks of a list of spectrum
-            ws: 
+    Given peaks of a list of spectrum, this function calculate the
+    inter-peak distance for all peaks in one spectrum
+    
+    Args:
+        peaks_idx (list) : list of peak indexes
+        peaks_w (list): list of peak locations
+        full (bool): return the full distance matrix if set True
+        polar (bool): turn the lower triangle of the matrix negative
+    
+    Return:
+        np.array : a len(peaks_w) x len(peaks_w) distance matrix
     """
     if len(peaks_w.shape) == 1:
         peaks_w = peaks_w[:, None]
@@ -55,32 +61,73 @@ def get_peaks_distance(peaks, peaks_w, full=False, polar=True):
     return interdist
 
 
-def create_grid(start, end, center, dist):
-    """ a grid with spaceing 'dist', that center at 'center', range from 'start - center' to 'end - center' """
+def create_grid(start:float, end:float, center:float, dist:float):
+    """ 
+    Generate a grid with spaceing 'dist', that center at 'center', range from 'start - center' to 'end - center' 
+    Args:
+        start (float) : grid starting position
+        end (float) : grid end position
+        center (float) : the grid origin
+        dist (float) : the grid spacing
+    Returns:
+        np.array : a grid 
+    """
     rn = int((end - center) // dist)
     ln = int((start - center) // dist)
     return np.arange(ln+1, rn+1) * dist
 
 
-def get_center_peak_idxs(peaks, spec_center_loc, tolerant):
+def get_center_peak_idxs(peaks:List[float], spec_center_loc:float, tolerant:float):
+    """
+    Extract all the center peaks index from a list of peak
+
+    Args:
+        peaks (list): a list of peaks
+        spec_center_loc (float): center peak location that want to find
+        tolerant (float): the maximum allow different between peak center and target center value
+
+    Returns:
+        list: center peak indexs
+    """
+    
     return [i for i, p in enumerate(peaks) if abs(p - spec_center_loc) < tolerant]
 
 
-def get_center_peak_idx(peaks, spec_center_loc, tolerant):
+def get_center_peak_idx(peaks:List[float], spec_center_loc:float, tolerant:float):
+    """
+    Extract the center peaks index from a list of peak
+
+    Args:
+        peaks (list): a list of peaks
+        spec_center_loc (float): center peak location that want to find
+        tolerant (float): the maximum allow different between peak center and target center value
+
+    Returns:
+        int: center peak index, return -1 if not found
+    """    
+    
     ci = np.argmin( abs(peaks - spec_center_loc) )
     if peaks[ci] - spec_center_loc < tolerant : return ci
     else: return -1
 
 
-def get_all_nbr_idxs(center_i, idxs):
+def get_all_nbr_idxs(center_i:int, idxs:List[int]):
     """
-        examples
+    A generator of all neighbors indexs given a starting index
+    Example:
 
-        center_i = 3
-        idx = 0, 1, 2, 3, 4, 
+    center_i = 3
+    idx = 0, 1, 2, 3, 4, 
 
-        what it yields in order:
-            2, 4, 1, 0
+    what it yields in order:
+        2, 4, 1, 0
+        
+    Args:
+        center_i : the center indexes
+        idxs : all the allowed indexes
+        
+    Returns:
+        generator : a generator of indexes
     """
     level = 0
     endleft = False
@@ -99,7 +146,45 @@ def get_all_nbr_idxs(center_i, idxs):
             endright = True
 
 
-def analyze_peaks_distance_cent(peaks, center_nbr_dists, center_peak, center_peak_i, grid_min_w, grid_max_w, tolerant=0.01, abs_tolerant=10, allow_discontinue=1): 
+def analyze_peaks_distance_cent(
+    peaks:List[float],
+    center_nbr_dists:List[float],
+    center_peak:float, 
+    center_peak_i:int,
+    grid_min_w:float,
+    grid_max_w:float,
+    tolerant:float=0.01,
+    abs_tolerant:float=10,
+    allow_discontinue:float=1
+    ): 
+    """
+    Extract peak families from a list of peaks using periodic analysis. The analysis would start from center peak and iteratively contruct families that has different
+    periodicity.  
+    
+    The actual tolerant which define the maximum allowed deviation between computed next peak in the family and the actual peaks locaitons
+        act_tolerant = min(tolerant * dist, abs_tolerant)
+        
+    Example of how it works:
+        peaks : 1 5 7 9 ->|13|<- 17  21 25
+        center is 13
+        peaks families:
+            periodicity of 4: 1 5 9 13 17 21
+            periodicity of 6: 7 13 25 (this one should have 21 since we set allow discountine to 1, it is accepted)
+
+    Args:
+        peaks (List[float]): list of peaks we analyze
+        center_nbr_dists (List[float]): all computed distance between nbrs peaks and the center peaks
+        center_peak (float): center peak location
+        center_peak_i (int): center peak index
+        grid_min_w (float): grid starting position, see 'create_grid'
+        grid_max_w (float): grid end position, see 'create_grid'
+        tolerant (float, optional): relative tolerant. Defaults to 0.01.
+        abs_tolerant (int, optional): absolute tolerant. Defaults to 10.
+        allow_discontinue (int, optional): allowed discontinity when searching peaks. Defaults to 1.
+
+    Returns:
+        List[PeakAnalysisDetail]: all the discovered peak family
+    """
     mask = np.zeros((len(peaks), len(peaks)), dtype=bool)
     out = []
 
@@ -149,12 +234,16 @@ def analyze_peaks_distance_cent(peaks, center_nbr_dists, center_peak, center_pea
 
 @dataclass
 class PeakAnalysisDetail:
+    """deprecated"""
     tpd: float
     matched: list
 
 
 @dataclass
 class PeakAnalysisResult:
+    """
+    Storage class of a peak family and its properties
+    """
     peaks_family: np.ndarray
     avg_dist: float
     avg_err: float
@@ -165,13 +254,17 @@ class PeakAnalysisResult:
 class Spectrum:
     """
         The Spectrum class is built to abstractalize all spectral data.
-        It consists of two fields:
-            spec : the intensity of the spectrum stored in an array form
-            ws : the location of the intensity stored in an array form
+        we use ws to store spectrum x-axes values instead xs since xs is 
+        first used as the index in our code.
+        
+        Args:
+            spec (np.array): The spectrum values
+            ws (np.array): The spectrum x coordinate values        
+        
     """
 
-    spec: np.ndarray
-    ws: np.ndarray
+    spec: np.ndarray = field(repr=False, metadata="the intensity of the spectrum stored in an array form")
+    ws: np.ndarray = field(metadata="the location of the intensity stored in an array form")
 
     def copy(self):
         """
@@ -215,7 +308,8 @@ class Spectrum:
                 assume_sorted : assume x is monotonically increasing value
                 inplace : update the current spectrum or create a new spectrum
 
-            Return: Spectrum
+            Return: 
+                Spectrum : the original or a new spectrum
         """
 
         f = interp1d(self.ws, self.spec, bounds_error=False, fill_value=fill_value, kind=kind, assume_sorted=assume_sorted)
@@ -230,10 +324,13 @@ class Spectrum:
             normalize the spectrum by min, max value
             if min max is not given then it would be computed from the given spectrum
 
-            Arguments:
+            Args:
                 min_v : minimum value
                 max_v : maximum value
                 inplace : if true update current object else return a new object
+                
+            Returns:
+                Spectrum : the original or a new spectrum
         """
         
         _min = self.spec.min() if min_v is None else min_v
@@ -251,40 +348,48 @@ class Spectrum:
             min_v (float): minimum value
             max_v ([float): maximum value
             inplace (bool, optional): if true, update the current object else reuturn a new object. Defaults to True.
+            
+        Returns:
+            Spectrum : the original or a new spectrum                        
         """
         nspec = self.spec * (max_v - min_v) + min_v
         return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
-    def scale(self, scalor, inplace=True):
+    def scale(self, scaler, inplace=True):
         """
-            Scale the signal intensity by the scalor value
+        Scale the signal intensity by the scaler value
 
-            Arguments:
-                scalor : scalor value 
-                inplace : if true update current object else return new object
+        Args:
+            scaler : scaling value 
+            inplace : if true update current object else return new object
+            
+        Returns:
+            Spectrum : the original or a new spectrum        
         """
 
-        return self._update_spectrum(self.spec*scalor, self.ws, inplace=inplace)
+        return self._update_spectrum(self.spec*scaler, self.ws, inplace=inplace)
 
     def savgol(self, window_length=15, polyorder=2, deriv=0, delta=1, mode="wrap", cval=0, inplace=True):
         """
-            Savitzky-Golay filter for noise reduction. Parameters see scipy.signal.savgol_filter
-            
-            Arguments:
-                window_length : The length of the filter window (i.e., the number of coefficients). Must be odd
-                polyorder : The order of the polynomial used to fit the samples. polyorder must be less than window_length.
-                deriv : The order of the derivative to compute. This must be a nonnegative integer. 
-                  The default is 0, which means to filter the data without differentiating.
-                delta: The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.
-                mode : Must be ‘mirror’, ‘constant’, ‘nearest’, ‘wrap’ or ‘interp’. 
-                    This determines the type of extension to use for the padded signal to which the filter is applied. 
-                    When mode is ‘constant’, the padding value is given by cval. See the Notes for more details on ‘mirror’,
-                     ‘constant’, ‘wrap’, and ‘nearest’. When the ‘interp’ mode is selected (the default), no extension is used. 
-                    Instead, a degree polyorder polynomial is fit to the last window_length values of the edges, 
-                      and this polynomial is used to evaluate the last window_length // 2 output values.
+        Savitzky-Golay filter for noise reduction. Parameters see scipy.signal.savgol_filter
+        
+        Arga:
+            window_length : The length of the filter window (i.e., the number of coefficients). Must be odd
+            polyorder : The order of the polynomial used to fit the samples. polyorder must be less than window_length.
+            deriv : The order of the derivative to compute. This must be a nonnegative integer. 
+                The default is 0, which means to filter the data without differentiating.
+            delta: The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.
+            mode : Must be ‘mirror’, ‘constant’, ‘nearest’, ‘wrap’ or ‘interp’. 
+                This determines the type of extension to use for the padded signal to which the filter is applied. 
+                When mode is ‘constant’, the padding value is given by cval. See the Notes for more details on ‘mirror’,
+                    ‘constant’, ‘wrap’, and ‘nearest’. When the ‘interp’ mode is selected (the default), no extension is used. 
+                Instead, a degree polyorder polynomial is fit to the last window_length values of the edges, 
+                    and this polynomial is used to evaluate the last window_length // 2 output values.
 
-                cval : Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.
+            cval : Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.
 
+        Returns:
+            Spectrum : the original or a new spectrum
         """
         filtered = savgol_filter(
             self.spec, 
@@ -297,7 +402,19 @@ class Spectrum:
         )
         return self._update_spectrum(filtered, self.ws, inplace=inplace)
 
-    def smooth(self, sigma=1, inplace=True, **kargs):
+    def smooth(self, sigma:float=1, inplace:bool=True, **kargs):
+        """
+        Apply gaussian smooth to the spectrum.
+
+        Args:
+            sigma (float, optional): Gaussian kernel's sigma. Defaults to 1.
+            inplace (bool, optional): if true update current object else return new object. Defaults to True.
+            **kargs : see scipy.ndimage.filters.gaussian_filter1d for more parameters
+
+        Returns:
+            Spectrum : the original or a new spectrum
+        """
+                
         nspec = gaussian_filter1d(self.spec, sigma=sigma, **kargs)
         return self._update_spectrum(nspec, self.ws, inplace=inplace)
 
@@ -307,12 +424,17 @@ class Spectrum:
     # Backgroun subtraction
     def remove_background(self, n=5, split=[], inplace=True):
         """ 
-            Assuming the background error is in linear form.
-            Fit a linear line from n data points at the beginning and the end of the spectrum.
-            Subtract the spacetrum by the fitted linear intensity.
+        Assuming the background error is in linear form.
+        Fit a linear line from n data points at the beginning and the end of the spectrum.
+        Subtract the spacetrum by the fitted linear intensity.
 
-            Argument :
-                n : number of entries from front and tail to be consider
+        Args:
+            n : number of entries from front and tail to be consider
+            split: keypoints that split the spectrum into different small regions
+            inplace (bool, optional): if true update current object else return new object. Defaults to True.
+            
+        Returns:
+            Spectrum : the original or a new spectrum
         """
         x = self.ws
         y = self.spec
@@ -378,14 +500,18 @@ class Spectrum:
     #     return self._update_spectrum( nspec, self.ws, inplace=inplace)
 
 
-    def filling_flat(self, trunc=0.99, inplace=True):
+    def filling_flat(self, trunc:float=0.99, inplace:bool=True):
         """
-            Filling truncated area with quadratic spline. Return a
-            new PseudoLaueCircleSpectrum if there are area to fill
-            else return the original object
-            
-            Arguments:
-                trunc : maximum value where signal is truncated
+        Filling truncated area with quadratic spline. Return a new 
+        PseudoLaueCircleSpectrum if there are area to fill else return 
+        the original object.
+        
+        Args:
+            trunc (float) : maximum value where signal is truncated
+            inplace (bool, optional): if true update current object else return new object. Defaults to True.
+                
+        Returns:
+            Spectrum : the original or a new spectrum            
         """
         
         # we fill it by the quadratic curve
@@ -401,14 +527,18 @@ class Spectrum:
         else:
             return Spectrum(spec, self.ws)
 
-    def fit_spectrum_peaks(self, height=0.001, threshold=0.001, prominence=0.10, **peak_args):
+    def find_spectrum_peaks(self, height:float=0.001, threshold:float=0.001, prominence:float=0.10, **peak_args):
         """
-            Find Peaks over the list of spectrum. 
-            
-            Arguments:
-                height : minimum height of the peak, see find_peaks ref to more detail 
-                thres : minimum vertical distance to its neighbor peak, see find_peaks ref to more detail 
-                prominence : peak prominence, see find_peaks ref to more detail 
+        Find Peaks over the list of spectrum using scipy.signal.find_peaks. The wavelet transform version would be 
+        implemented in another method used here.
+        
+        Arguments:
+            height : minimum height of the peak, see find_peaks ref to more detail 
+            thres : minimum vertical distance to its neighbor peak, see find_peaks ref to more detail 
+            prominence : peak prominence, see find_peaks ref to more detail 
+        Returns:
+            Array : the peak index
+            Array : the peak properties
         """
         peaks, peaks_info = find_peaks(self.spec, height=height, threshold=threshold, prominence=prominence, **peak_args)
 
@@ -417,14 +547,17 @@ class Spectrum:
 
         return peaks, peaks_info
 
-    def get_peaks_distance(self, full=False, polar=True):
+    def get_peaks_distance(self, full:bool=False, polar:bool=True):
         """
-            Given peaks of a list of spectrum, this function calculate the
-            inter-peak distance for all peaks in one spectrum
+        Given peaks of a list of spectrum, this function calculate the
+        inter-peak distance for all peaks in one spectrum
+        
+        Args:
+            full : get the full inter peak distance matrix or only get the upper triangle
+            polar : make d[i, j] = -d[j, i]
             
-            Argument:
-                full : get the full inter peak distance matrix or only get the upper triangle
-                polar : make d[i, j] = -d[j, i]
+        Returns:
+            Array : a matrix of inter-peaks distance
         """
         interdist = get_peaks_distance(self.peaks, self.ws[self.peaks], full, polar)
 
@@ -433,6 +566,34 @@ class Spectrum:
         return interdist
 
     def analyze_peaks_distance_cent(self, tolerant=0.01, abs_tolerant=10, allow_discontinue=1):
+        """
+        Wrapped method of the analyze_peaks_distance_cent function
+        
+        Extract peak families from a list of peaks using periodic analysis. 
+        The analysis would start from center peak and iteratively contruct families that has differentperiodicity.  
+        
+        The actual tolerant which define the maximum allowed deviation between computed next 
+        peak in the family and the actual peaks locaitons
+            act_tolerant = min(tolerant * dist, abs_tolerant)
+            
+        Example of how it works:
+            peaks : 1 5 7 9 ->|13|<- 17  21 25
+            center is 13
+            peaks families:
+                periodicity of 4: 1 5 9 13 17 21
+                periodicity of 6: 7 13 25 (this one should have 21 since we set allow discountine to 1, it is accepted)
+
+        Args:
+
+            tolerant (float, optional): relative tolerant. Defaults to 0.01.
+            abs_tolerant (int, optional): absolute tolerant. Defaults to 10.
+            allow_discontinue (int, optional): allowed discontinity when searching peaks. Defaults to 1.
+
+        Returns:
+            List[PeakAnalysisDetail]: all the discovered peak family
+        """        
+        
+        
         grid_max_w = max(self.ws)
         grid_min_w = 0
 
@@ -447,19 +608,30 @@ class Spectrum:
         
         return analyze_peaks_distance_cent(self.peaks, center_nbr_dists, center_peak, center_peak_i, grid_min_w, grid_max_w, tolerant, abs_tolerant, allow_discontinue)
 
-    def plot_spectrum(self, ax=None, peaks=None, peakgroups=None, offset=0, peak_offset=0, showlegend=False, **fig_kargs):
+    def plot_spectrum(
+            self, 
+            ax=None, 
+            peaks=None, 
+            peakgroups=None, 
+            offset=0, 
+            peak_offset=0, 
+            showlegend=False, 
+            **fig_kargs
+        ):
         """
-            Plot the spectrum using matplotlib
-            Arguments:
-                ax : the matplotlib Axes to plot onto, if None then a new figure is created
-                peaks : the peaks index in array form 
-                peakgroups : a group index of peak's index telling how peak index is group togethered
-                offset : a offset that life the spectrum line 
-                peak_offset : a offset that lift the peak symbol away from the spectrum line
-                showlegend : show legend
-            Return
-                fig : matplotlib Figure
-                ax : matplotlib Axes
+        Plot the spectrum using matplotlib
+        
+        Args:
+            ax : the matplotlib Axes to plot onto, if None then a new figure is created
+            peaks : the peaks index in array form 
+            peakgroups : a group index of peak's index telling how peak index is group togethered
+            offset : a offset that life the spectrum line 
+            peak_offset : a offset that lift the peak symbol away from the spectrum line
+            showlegend : show legend
+            
+        Returns:
+            fig : matplotlib Figure
+            ax : matplotlib Axes
         """
 
         # peaks, peaksinfo = peaks
@@ -485,18 +657,21 @@ class Spectrum:
     @staticmethod        
     def get_peaks_group(ana_res, peaks, exclusive=True):
         """
-            Get all peaks with similar peaks distance for each spectrum in the spectrum list.
-            This method run on the ana_res where the peaks with similar inter-peak distances are 
-            identified already. The method here just to make sure one peak is only presented in one group,
-            which is constraint by picking peak from the group with lower peak distance then ignore any
-            group has overlapping peaks but with higher peak distance.
+        Get all peaks with similar peaks distance for each spectrum in the spectrum list.
+        This method run on the ana_res where the peaks with similar inter-peak distances are 
+        identified already. The method here just to make sure one peak is only presented in one group,
+        which is constraint by picking peak from the group with lower peak distance then ignore any
+        group has overlapping peaks but with higher peak distance.
 
-            Return a list of the grouped peaks and their average peak distance 
+        Return a list of the grouped peaks and their average peak distance 
+        
+        Argument:
+            ana_res: list of PeakAnalysisResult
+            peaks: fitted peaks
+            exclusive: not allow one peak position to be occupy many time if True
             
-            Argument:
-                ana_res: list of PeakAnalysisResult
-                peaks: fitted peaks
-                exclusive: not allow one peak position to be occupy many time if True
+        Returns:
+            List : a list of peakgroups
         """
         
         allpeaks_unfilterd = [ (res.peaks_family, res.avg_dist) for res in ana_res ]
@@ -513,7 +688,21 @@ class Spectrum:
         return out
 
 
-    def save(self, path, name="spectrum"):
+    def save(self, path:Union[str, Path], name:str="spectrum"):
+        """
+        Save the spectrum class into a pickle file
+        The file directory would be 
+            path/f"{name}.pkl"
+
+        Args:
+            path (Union[str, Path]): folder to save
+            name (str, optional): filename to save. Defaults to "spectrum".
+
+        Returns:
+            Spectrum : the original or a new spectrum               
+            
+        """
+        
         _exclude = ['sm']
         path = Path(path)
         temps = {k:v for k, v in self.__dict__.items() if k in _exclude }
@@ -525,37 +714,65 @@ class Spectrum:
         if "sm" in temps: temps['sm'].save(path)
 
         for k, v in temps.items(): setattr(self, k, v)
+        
+        return self
     
     @classmethod
-    def load(cls, path, name="spectrum"):
+    def load(cls, path, name="spectrum", ignore_err=True):
+        """
+        Load the spectrum class from a pickle file
+        The file directory would be 
+            path/f"{name}.pkl"
+
+        Args:
+            path (Union[str, Path]): folder to save
+            name (str, optional): filename to save. Defaults to "spectrum".
+            ignore_err (bool): If set true then error would only be printed. Default to True
+
+        Returns:
+            Spectrum : the original or a new spectrum 
+        """        
+        
         self = load_pickle(path/f"{name}.pkl")
         if hasattr(self, "sm"):
             try:
                 self.sm = SpectrumModel.load(path)
             except Exception as e:
-                print(e)
+                if ignore_err:
+                    print(e)
+                else:
+                    raise e
         return self
 
 @dataclass
 class CollapseSpectrum(Spectrum):
     """
-        an intergrated 1D spectrum from a region of a 2D diffraction image
+    An intergrated 1D spectrum from a region of a 2D diffraction image
 
-        sx: cropped starting point - x
-        sy : cropped starting point - y
-        ex : cropped ending point - x
-        ey : cropped ending point - y
+    sx (int) : cropped starting point - x
+    sy (int) : cropped starting point - y
+    ex (int) : cropped end point - x
+    ey (int) : cropped end point - y
     """
 
     sx: int # cropped starting point - x
     sy : int #  cropped starting point - y
-    ex : int # cropped ending point - x
-    ey : int # cropped ending point - y
+    ex : int # cropped end point - x
+    ey : int # cropped end point - y
 
     @classmethod
     def from_rheed_horizontal(cls, rd, sx, sy, ex, ey):
         """
-            get horizontal collapse spectrum which is basically the integrated spectrum over rows
+        Get horizontal collapse spectrum which is basically the integrated spectrum over rows
+        
+        rd (Rheed): rheed pattern
+        sx (int): cropped starting point - x
+        sy (int): cropped starting point - y
+        ex (int): cropped end point - x
+        ey (int): cropped end point - x
+        
+        Returns:
+            CollapseSpectrum : the integrated spectrum
         """
         pattern = crop(rd.pattern, sx, sy, ex, ey)
         return cls(pattern.sum(axis=0), np.arange(sy, ey), sx, sy, ex, ey)
@@ -563,7 +780,16 @@ class CollapseSpectrum(Spectrum):
     @classmethod
     def from_rheed_vertical(cls, rd, sx, sy, ex, ey):
         """
-            get vertical collapse spectrum which is basically the integrated spectrum over columns
+        Get vertical collapse spectrum which is basically the integrated spectrum over columns
+            
+        rd (Rheed): rheed pattern
+        sx (int): cropped starting point - x
+        sy (int): cropped starting point - y
+        ex (int): cropped end point - x
+        ey (int): cropped end point - x
+        
+        Returns:
+            CollapseSpectrum : the integrated spectrum            
         """
 
         pattern = crop(rd.pattern, sx, sy, ex, ey)

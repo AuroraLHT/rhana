@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Optional, Union
 from rhana.pattern import RheedConfig, RheedMask
 from rhana.utils import _CM_rgb
 
@@ -6,8 +6,25 @@ from sklearn.cluster import DBSCAN
 import plotly.graph_objects as go
 import numpy as np
 
+
 class DBSCANDistanceCluster:
-    def __init__(self, eps=3, min_samples=1):
+    """
+    A class the use DBSCAN clustering algorithm to cluster extracted peak periodicity
+    
+    """
+    def __init__(self, eps:float=3, min_samples:int=1):
+        """
+        Initialize the DBSCAN Model
+        see sklearn.cluster.DBSCAN for more implementation details
+        
+        Args:
+            eps (float, optional): The maximum distance between two samples for one to be 
+                considered as in the neighborhood of the other. This is not a maximum bound 
+                on the distances of points within a cluster. Defaults to 3.
+            min_samples (int, optional): The number of samples (or total weight) in a 
+                neighborhood for a point to be considered as a core point. This includes 
+                the point itself. Defaults to 1.
+        """
         self.model = DBSCAN(eps=eps, min_samples=min_samples)
     
     def _mean_dist(self, dists):
@@ -34,7 +51,19 @@ class DBSCANDistanceCluster:
         
         return self.labels
         
-    def fit_predict(self, dists):
+    def fit_predict(self, dists:List[float]):
+        """
+        Use an API similar to a sklearn model. Given a input dists, return the 
+        clustering label. In the meanwhile, the clustering results could be accessed
+        by 'mean_dists' and 'labels' attributes that stored in the object
+                
+
+        Args:
+            dists (Array[float]): an array of distance/periodicity values
+
+        Returns:
+            Array[int]: clustering label of each value in dists
+        """
         self.dists = dists
         self.model.fit_predict(dists)
         self.labels = self.model.labels_
@@ -45,8 +74,18 @@ class DBSCANDistanceCluster:
         return labels
 
 class RHEEDMaskDistancePhaser:
+    """
+    Construct phase diagram based on the extracted peak periodicty from multiple rheed patterns.
+    Run the periodicity analysis before running this class. The phaser is able to identity the
+    present of each phase and their relative intensity ratio.
+    
+    """
     def __init__(self, rdms:List[RheedMask], convert_dist=False):
-        # assume rdms already has distance computed
+        """
+        Args:
+            rdms (List[RheedMask]): a list RheedMask that has ran through periodicity analysis already
+            convert_dist (bool, optional): Convert the distance in pixel space into reciprocal space. Defaults to False.
+        """
         self.rdms = rdms
         self.convert_dist = convert_dist
         
@@ -63,7 +102,19 @@ class RHEEDMaskDistancePhaser:
         self.all_peak_dists_values = np.array(list(map(lambda x: x[1], self.all_peak_dists)))
 
 
-    def run_cluster(self, eps=3, min_samples=1):
+    def run_cluster(self, eps:float=3, min_samples:int=1):
+        """ 
+        Applying DBSCAN on the all extracted peak family and use it to
+        find multiple phases in the input list of rheed.
+
+        Args:
+            eps (float, optional): The maximum distance between two samples for one to be 
+                considered as in the neighborhood of the other. This is not a maximum bound 
+                on the distances of points within a cluster. Defaults to 3.
+            min_samples (int, optional): The number of samples (or total weight) in a 
+                neighborhood for a point to be considered as a core point. This includes 
+                the point itself. Defaults to 1.
+        """
         self._get_all_distance()
         self.dc = DBSCANDistanceCluster(eps=eps, min_samples=min_samples)
         labels = self.dc.fit_predict(self.all_peak_dists_values[:, None])
@@ -78,17 +129,51 @@ class RHEEDMaskDistancePhaser:
             rdm.cluster_labels = np.array(rdm.cluster_labels)
             rdm.cluster_labels_unique = np.unique(rdm.cluster_labels)
 
+
     def get_intensity_map(self,):
+        """
+        A shortcut to compute every group intensity of the input rheed list
+        
+        Returns:
+            List: list of group intensity in the order of input rheed
+            List: list of group percent in the order of input rheed
+        """
+        
+        all_group_intensity = []
+        all_group_percent = []
         for rdm in self.rdms:
-            rdm.get_group_intensity()
+            group_intensity, group_percent = rdm.get_group_intensity()
+            all_group_intensity.append(group_intensity)
+            all_group_percent.append(group_percent)
+            
+        return all_group_intensity, all_group_percent
 
 
     def plot_intensity_map(self, x, y, name, xlabel, ylabel, log_x=False, log_y=False, x_space=5, y_space=5, max_num_row=5, text_x_space=0, text_y_space=3, reverse_x=False, reverse_y=False, scatter_size=15, cmap=_CM_rgb):
         """
-            x: position on the xaxis
-            y: position on the yaxis
-            xlabel: x axis label
-            ylabel: y axis label
+        Phase mapping visualization v1. The publication figures is hand-crafted. 
+        Tears drop from a grad.
+        
+        Args:            
+            x (Array): position of the rheedmask on the xaxis
+            y (Array): position of the rheedmask on the yaxis
+            name (Array): sample name of the rheedmask
+            xlabel (str): x axis label
+            ylabel (str): y axis label
+            log_x (bool): convert the x-axis to log10 base
+            log_y (bool): convert the x-axis to log10 base
+            x_space (int): x spacing between each rectangle 
+            y_space (int): y spacing between each rectangle 
+            max_num_row (int): maximum number of rectangle in each row
+            text_x_space (int): text x offset from the center of the rheedmask
+            text_y_space (int): text y offset from the center of the rheedmask
+            reverse_x (bool): reverse the x axis if someone else did it before
+            reverse_y: reverse the x axis if someone else did it before
+            scatter_size: the rectangle size
+            cmap: color map used to indicate different phases
+            
+        Returns:
+            Plotly.Figure : a figure object contains all the plotting elements
         """
         def scale(x, space, factor, is_log):
             if is_log:

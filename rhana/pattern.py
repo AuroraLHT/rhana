@@ -16,7 +16,7 @@ from scipy.optimize import curve_fit
 # from skimage.feature import blob_dog, blob_log, blob_doh
 from skimage.feature import blob_log
 from skimage.color import rgb2gray
-from skimage.filters import gaussian
+from skimage.filters import gaussian as skim_gaussian
 from skimage.transform import rotate as skim_rotate
 
 import matplotlib.pyplot as plt
@@ -37,6 +37,7 @@ from rhana.utils import *
 
 from dataclasses import dataclass, field
 
+
 def image_bg_sub_dilation(image, seed_bias=.1):
     im = image.astype(float)
     #im = gaussian_filter(im, 1)
@@ -50,13 +51,17 @@ def image_bg_sub_dilation(image, seed_bias=.1):
     hdome = im - dilated
     return im, dilated, hdome
 
+
 def correct_zero_laue(xy, db, ndb):
     (nx, ny, _) = ndb
     (x, y, _) = db
     return np.array( [xy[0] + (nx-x), xy[1] + (ny-y)] )
 
+
 @dataclass 
 class RheedConfig:
+    """A storage class for experimental configuration of the RHEED
+    """
     sub_ccd_dist : int = field(metadata={"unit" : "mm"})
     pixel_real : int = field(metadata={"unit" : "mm/pixel"})
     ccd_cam_width : int = field(metadata={"unit" : "mm"})
@@ -70,9 +75,13 @@ class RheedConfig:
     
     def hdist2G(self, dist):
         """
-            convert horizontal distance 2 G
-            dist : horizontal distance is in pixel
-            return dG is in nm^-1
+        convert horizontal distance (d) in pixel space to reciprocal space (dG)
+        
+        Args:        
+            dist (float): horizontal distance is in pixel
+            
+        Returns
+            float : dG is in nm^-1
         """
         real_dist = self.pixel_real * dist
         # print(real_dist)
@@ -83,9 +92,25 @@ class RheedConfig:
         return dG
 
 class Rheed:
+    """The main class that allow you to:
+     1. load rheed from image or binary form (need more supports)
+     2. simple manipulation of the rheed pattern
+     3. extract simple features from the rheed pattern
+     4. visualize the rheed pattern along with other extracted features
+    """
+    
     _CMAP = "cividis"
 
-    def __init__(self, pattern, min_max_scale=False, standard_norm=False, AOI=None, config:RheedConfig=None):
+    def __init__(self, pattern:np.array, min_max_scale:bool=False, standard_norm:bool=False, AOI:np.array=None, config:RheedConfig=None):
+        """Rheed Class Initializer
+
+        Args:
+            pattern (np.array): a 2d rheed pattern stored in a numpy array
+            min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
+            standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
+            AOI (np.array, optional): a 2d mask that cover the area of interest. Defaults to None.
+            config (RheedConfig, optional): Rheed experimental configuration. Defaults to None.
+        """
         self.pattern = pattern.copy()
         self.AOI = AOI
         if AOI is not None:
@@ -97,9 +122,25 @@ class Rheed:
         if min_max_scale:
             self.min_max_scale()
         self.config = config
-        
+
+  
     @classmethod
     def from_kashiwa(cls, path, contain_hw=True, min_max_scale=False, standard_norm=False, log=False, use_mask=True, rotate=0, config:RheedConfig=None):
+        """Load Rheed pattern form Mikk's Labs formation. Format name unknown. The detail decoding method see io.kashiwa 
+
+        Args:
+            path (str): rheed binary file path
+            contain_hw (bool, optional): Does the file contain height and width info. Defaults to True.
+            min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
+            standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
+            log (bool, optional): _description_. Defaults to False.
+            use_mask (bool, optional): use a predefined mask as AOI. Defaults to True.
+            rotate (int, optional): fix the slight tilting in RHEED. Defaults to 0.
+            config (RheedConfig, optional): Rheed experimental configuration.. Defaults to None.
+
+        Returns:
+            Rheed: an instantiated rheed obj
+        """
         if contain_hw:
             pattern = ksw.decode_rheed(path)
         else:
@@ -111,17 +152,57 @@ class Rheed:
 
         return cls(pattern, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
+
     @classmethod
     def from_multi(cls, patterns, min_max_scale=False, standard_norm=False, AOI=None):
+        """
+        Convert multiple patterns into one rheed pattern
+
+        Args:
+            patterns (List): a list of patterns in np.array
+            min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
+            standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
+            AOI (np.array, optional): a 2d mask that cover the area of interest. Defaults to None.
+        Returns:
+            Rheed: an instantiated rheed obj
+        """
         return cls(np.mean(patterns, axis=0), min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI)
+
 
     @classmethod 
     def from_multi_kashiwa(cls, paths, contain_hw=True, min_max_scale=False, standard_norm=False, log=False):
+        """
+        Convert multiple patterns stored in kashiwa's binary format into one rheed pattern
+
+        Args:
+            path (List): a list of binary paths
+            min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
+            standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
+            log (bool): convert the intensity to log scale. Defaults to False.
+        Returns:
+            Rheed: an instantiated rheed obj
+        """        
+        
         patterns = [ cls.from_kashiwa(path,contain_hw=contain_hw, min_max_scale=min_max_scale, standard_norm=standard_norm, log=log).pattern for path in paths ]
         return cls.from_multi(patterns, AOI=~ksw._APMASK)
 
+
     @classmethod
-    def from_image(cls, path, rotate=0, crop_box=None, min_max_scale=False, standard_norm=False,  AOI=None, config=None):
+    def from_image(cls, path:str, rotate:float=0, crop_box:np.array=None, min_max_scale:bool=False, standard_norm:bool=False,  AOI:np.array=None, config:RheedConfig=None):
+        """Create a rheed obj from an image.
+
+        Args:
+            path (str): the image path
+            rotate (int, optional): fix the slight tilting in RHEED. Defaults to 0.
+            crop_box (array, optional): a box that define the area to crop out. see PIL.Image.crop. Defaults to None.
+            min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
+            standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
+            AOI (np.array, optional): a 2d mask that cover the area of interest. Defaults to None.
+            config (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         img = Image.open(path)
         if rotate != 0 :
             img = img.rotate(rotate)
@@ -129,13 +210,24 @@ class Rheed:
             img = img.crop(crop_box)
         return cls(np.array(img)/255, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
-    def mean_clip(self, alpha=1, inplace=True):
+
+    def mean_clip(self, inplace:bool=True):
+        """Clip the value that below the average intensity to average intensity and shift the
+        average intensity to 0. An effective way to remove noise.
+
+        Args:
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True. Defaults to True.
+            
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
         if self.AOI is not None:
             mean = self.pattern[self.AOI].mean()
         else:
             mean = self.pattern.mean()
         
         return self._update_pattern(np.clip(self.pattern-mean, 0, 1), inplace=inplace)
+
             
     def _update_pattern(self, pattern, inplace):
         if inplace:
@@ -144,25 +236,74 @@ class Rheed:
         else:
             return Rheed(pattern)
 
-    def crop(self, sx, sy, ex, ey, inplace=False):
+
+    def crop(self, sx:int, sy:int, ex:int, ey:int, inplace=False):
+        """Crop the pattern by the given corner points. 
+
+        Args:
+            sx (int): _description_
+            sy (int): _description_
+            ex (int): _description_
+            ey (int): _description_
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True. Defaults to True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
         return self._update_pattern(crop(self.pattern, sx, sy, ex, ey), inplace=inplace)
 
+
     def remove_bg(self, dilation_bias=0.5, inplace=True):
+        """Remove background by dilation methods. Not very intuitive to use.
+        see skimage.morphology.reconstruction for more detail
+        Args:
+            dilation_bias (float, optional): background level. Defaults to 0.5.
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True. Defaults to True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
         im, dilated, hdome0 = image_bg_sub_dilation(self.pattern, dilation_bias)
         dilated = hdome0 / hdome0.max()
 
         return self._update_pattern(dilated, inplace=inplace)
 
+
     def smooth(self, inplace=True, **gaussian_kargs):
-        smoothed = gaussian(self.pattern, **gaussian_kargs)
+        """Apply a 2d gaussian kernel to smooth the pattern
+        see skimage.filters.gaussian for more details
+        Args:
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
+        smoothed = skim_gaussian(self.pattern, **gaussian_kargs)
         return self._update_pattern(smoothed, inplace=inplace)
 
+
     def min_max_scale(self, inplace=True):
+        """Scale the pattern to min==0 and max==1
+
+        Args:
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
         pattern = ( self.pattern - self.pattern.min() ) / (self.pattern.max() - self.pattern.min() + 1e-5)
         return self._update_pattern(pattern, inplace=inplace)
 
+
     def standard_norm(self, inplace=True):
-        
+        """Normalized the pattern by mean and std.
+
+        Args:
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
         if self.AOI is not None:
             pattern = ( self.pattern - self.pattern[self.AOI].mean() ) / (self.pattern[self.AOI].std() + 1e-5)
         else:
@@ -171,22 +312,20 @@ class Rheed:
 
     def get_blobs(self, max_sigma=30, num_sigma=10, threshold=.1, **blob_kargs):
         """
-            Find bright spots in the RHEED pattern image using the blob detection algorithm
-            with Laplacian of Gaussian method.
+        Find bright spots in the RHEED pattern image using the blob detection algorithm
+        with Laplacian of Gaussian method. See skimage.feature.blob_log for more details
 
-            Arguments:
-                min_sigma : float, optional
-                    The minimum standard deviation for Gaussian Kernel. Keep this low to detect smaller blobs.
-                max_sigma : float, optional
-                    The maximum standard deviation for Gaussian Kernel. Keep this high to detect larger blobs.
-                num_sigma : int, optional
-                    The number of intermediate values of standard deviations to consider between min_sigma and max_sigma.
-                threshold : float, optional.
-                    The absolute lower bound for scale space maxima. Local maxima smaller than thresh are ignored. Reduce this to detect blobs with less intensities.
-                overlap : float, optional
-                    A value between 0 and 1. If the area of two blobs overlaps by a fraction greater than threshold, the smaller blob is eliminated.
-                log_scale : bool, optional
-                    If set intermediate values of standard deviations are interpolated using a logarithmic scale to the base 10. If not, linear interpolation is used
+        Args:
+            max_sigma (float, optional):
+                The maximum standard deviation for Gaussian Kernel. Keep this high to detect larger blobs.
+            num_sigma (int, optional):
+                The number of intermediate values of standard deviations to consider between min_sigma and max_sigma.
+            threshold (float, optional):
+                The absolute lower bound for scale space maxima. Local maxima smaller than thresh are ignored. Reduce this to detect blobs with less intensities.
+
+        Returns
+            Array : an array of blogs
+
         """
         blobs_log = blob_log(self.pattern, max_sigma=max_sigma, num_sigma=num_sigma, threshold=threshold, **blob_kargs)
 
@@ -200,9 +339,13 @@ class Rheed:
         """
             plot the blobs location on the RHEED pattern
             
-            Arguments:
+            Args:
                 img : RHEED pattern image
                 blobs : output from blobs detection algorithm or get_blobs()
+                
+            Return:
+                Matplotlib.pyplot.Figure
+                Matplotlib.pyplot.Axes
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
@@ -211,17 +354,25 @@ class Rheed:
             x, y, r = blob
             show_circle(ax, (x,y), r, color=blob_color)
         ax.set_axis_off()
+        
+        return fig, ax
+
 
     def plot_0laue(self, ax=None, **fig_kargs):
         if hasattr(self, "xy") and hasattr(self, "r"):
             return self.plot_nlaue(self.xy, [self.r], ax=ax, **fig_kargs)
 
+
     def get_direct_beam(self, rmin=3):
         """
             Find the blob that contain direct beam information. Assuming the direct beam is the top one.
 
-            Arguments:
+            Args:
                 rmin : minimum radius for a spot to be selected
+                
+            Returns:
+                Array : blob x and y
+                int : blob id
         """
         def get_top_blob(blobs):
             top = np.inf
