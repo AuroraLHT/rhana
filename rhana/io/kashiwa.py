@@ -229,7 +229,12 @@ exp_voltage = {
 
 cali_exp_pixel_real = {
     # 'IT003': 65 / 800 * 346 / 604,
-    'IT003': 65 / 800 * 110 / 210,
+    # 'IT003': 65 / 800 * 110 / 210,
+    # IT003 camera focus might be chaned
+    # based on the XRD, AFM and RHEED from near by sample
+    # we know the distance is refer to Fe3O4
+    # thus we backcalculated the correct pixel real value
+    'IT003': 65 / 800 * 0.8984615384615384,
     'IT004': 65 / 800 * 110 / 97.5,
     'IT005': 65 / 800 * 110 / 97.5,
     'IT006': 65 / 800 * 1,

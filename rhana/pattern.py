@@ -241,10 +241,10 @@ class Rheed:
         """Crop the pattern by the given corner points. 
 
         Args:
-            sx (int): _description_
-            sy (int): _description_
-            ex (int): _description_
-            ey (int): _description_
+            sx (int): crop starting x position
+            sy (int): crop starting y position
+            ex (int): crop end x position
+            ey (int): crop end y position
             inplace (bool, optional): the operated result would overwrite the stored pattern if True. Defaults to True.
 
         Returns:
@@ -337,15 +337,15 @@ class Rheed:
 
     def plot_blobs(self, blob_color="red", ax=None, **fig_kargs):
         """
-            plot the blobs location on the RHEED pattern
+        plot the blobs location on the RHEED pattern
+        
+        Args:
+            img : RHEED pattern image
+            blobs : output from blobs detection algorithm or get_blobs()
             
-            Args:
-                img : RHEED pattern image
-                blobs : output from blobs detection algorithm or get_blobs()
-                
-            Return:
-                Matplotlib.pyplot.Figure
-                Matplotlib.pyplot.Axes
+        Return:
+            Matplotlib.pyplot.Figure
+            Matplotlib.pyplot.Axes
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
@@ -359,20 +359,30 @@ class Rheed:
 
 
     def plot_0laue(self, ax=None, **fig_kargs):
+        """Plot the 0 order laue circle
+        
+        Args:
+            ax (matplotlib.pyplot.Axes): figure's axes. Defaults to None
+                
+        Returns:
+            matplotlib.pyplot.Figure : plot's figure
+            matplotlib.pyplot.Axes : plot's figure
+        """    
+    
         if hasattr(self, "xy") and hasattr(self, "r"):
             return self.plot_nlaue(self.xy, [self.r], ax=ax, **fig_kargs)
 
 
     def get_direct_beam(self, rmin=3):
         """
-            Find the blob that contain direct beam information. Assuming the direct beam is the top one.
+        Find the blob that contain direct beam information. Assuming the direct beam is the top one.
 
-            Args:
-                rmin : minimum radius for a spot to be selected
-                
-            Returns:
-                Array : blob x and y
-                int : blob id
+        Args:
+            rmin : minimum radius for a spot to be selected
+            
+        Returns:
+            Array : blob x and y
+            int : blob id
         """
         def get_top_blob(blobs):
             top = np.inf
@@ -391,11 +401,16 @@ class Rheed:
 
     def get_specular_spot(self, rmin=3):
         """
-            Find the blob that contain specular spot information. Return None, -1 if no specular spot
-            spot is found.
+        Find the blob that contain specular spot information. Return None, -1 if no specular spot
+        spot is found. The basic idea is to find the first blob that is right below the direct
+        beam blob. Need to call get_direct_beam method first.
 
-            Arguments:
-                rmin : minimum radius for a spot to be selected
+        Args:
+            rmin (float): minimum radius for a spot to be selected
+        
+        Returns:
+            Array : blob x and y
+            int : blob id
         """
         
         dbx, dby, dbr = self.blobs[self.db_i]
@@ -411,9 +426,15 @@ class Rheed:
         self.ss = ss
         return ss, i
 
+
     def get_Laue0(self):
         """
-            get 0-Laue Circle location and radius given the direct beam and specular spot blobs            
+        Get 0-Laue Circle location and radius when the direct beam and specular spot blobs is located
+        Need to run get_direct_beam and get_specular_spot methods first.
+        
+        Returns:
+            Array : 0-zero order Laue circle center's x and y
+            float : 0-zero order Laue circle radius
         """
         if hasattr(self, "db") and hasattr(self, "ss") and self.db is not None and self.ss is not None:
             dbx, dby, dbr = self.blobs[self.db_i]
@@ -431,97 +452,89 @@ class Rheed:
             raise Exception("either direct beam or specular beam is not detected")
 
     def plot_nlaue(self, xy, rs, ax=None, **fig_kargs):
+        """Plot multiple laue circles. 
+
+        Args:
+            xy (Array): x and y locations of the circle center 
+            rs (Array): radius of different Laue circle
+            ax (matplotlib.pyplot.Axes, optional): figure's axes. Defaults to None.
+            
+        Returns:
+            matplotlib.pyplot.Figure : plot's figure
+            matplotlib.pyplot.Axes : plot's figure
+        """
+        
         fig, ax = _create_figure(ax=ax, **fig_kargs)
         self.plot_pattern(ax=ax)
         for r in rs:
             show_circle(ax, xy, r )
         ax.set_axis_off()
+        
+        return fig, ax
 
-    def plotly_pattern(self, mp_spectrums=None, spectrums=None, cluster_labels=None, clustered_locations=None, dist_flat=None, **fig_kargs):
+    def plotly_pattern(self,  **fig_kargs):
+        """Plot pattern with interactive plotly backend
+
+        Returns:
+            _plotly.graph_objects.Figure: Plotly graph
+        """
 
         fig = go.Figure(**fig_kargs)
         fig = fig.add_trace(go.Heatmap(z=self.pattern,  colorscale="Cividis"))
         fig.update_layout(height=600, width=800, yaxis=dict(autorange='reversed'), showlegend=True)
 
-        if cluster_labels is not None and clustered_locations is not None and dist_flat is not None:
-            xs_list = clustered_locations[0]
-            ys_list = clustered_locations[1]
-
-            for label in np.unique(cluster_labels):
-                if label == -1 : continue
-
-                indexs = np.where(cluster_labels==label)[0]
-                cluster_center = np.mean(dist_flat[indexs])
-
-                xs = np.concatenate( [ xs_list[i] for i in indexs ] )
-                ys = np.concatenate( [ ys_list[i] for i in indexs ] )
-
-                fig.add_trace( 
-                    go.Scatter(
-                        x=xs, y=ys,
-                        marker=go.scatter.Marker(
-                            symbol="x-open",
-                            color=_CM[label%len(_CM)],
-                            opacity=1,
-                            size=10,
-                        ),
-                        name=f"c{label} = {cluster_center :.2f}",
-                        mode="markers"
-                    )
-                )
-
-            fig.update_layout(
-                legend=go.layout.Legend(
-                    x=0,
-                    y=1,
-                    traceorder="normal",
-                    font=dict(
-                        family="sans-serif",
-                        size=12,
-                        color="white"
-                    ),
-            #         bgcolor="LightSteelBlue",
-                    bgcolor="Black",
-                    bordercolor="Black",
-                    borderwidth=2
-                )
+        fig.update_layout(
+            legend=go.layout.Legend(
+                x=0,
+                y=1,
+                traceorder="normal",
+                font=dict(
+                    family="sans-serif",
+                    size=12,
+                    color="white"
+                ),
+                # bgcolor="LightSteelBlue",
+                bgcolor="Black",
+                bordercolor="Black",
+                borderwidth=2
             )
+        )
         return fig
 
-    def plot_pattern(self, ax=None, mp_spectrums=None, cluster_labels=None, clustered_locations=None, dist_flat=None, cmap=None, **fig_kargs):
+    def plot_pattern(self, ax=None, show_axes=False, cmap=None, **fig_kargs):
+        """Plot pattern with matplotlib
+
+        Args:
+            ax (matplotlib.pyplot.Axes, optional): Figure's Axes. Defaults to None.
+            show_axes (bool, optional): show the x y label and ticks. Defaults to False.
+            cmap (str, optional): Matplotlib continueous colormap name. Defaults to None.
+
+        Returns:
+            matplotlib.pyplot.Figure : plot's figure
+            matplotlib.pyplot.Axes : plot's axes
+        """
         fig, ax = _create_figure(ax, **fig_kargs)
         ax.imshow(self.pattern, cmap=cmap if cmap is not None else self._CMAP)
 
-        if mp_spectrums is not None and mp_spectrums.spectrums is not None:
-            for i, spec in enumerate(mp_spectrums.spectrums):
-                show_circle(ax, spec.xy, spec.pr, alpha=0.3, color="red")
-
-        if mp_spectrums is not None and hasattr(mp_spectrums,"cluster_labels") and hasattr(mp_spectrums, "clustered_locations") and hasattr(mp_spectrums, "dist_flat"):
-
-            xs_list = mp_spectrums.clustered_locations[0]
-            ys_list = mp_spectrums.clustered_locations[1]
-
-            for label in np.unique(mp_spectrums.cluster_labels):
-                if label == -1 : continue
-                
-                indexs = np.where(mp_spectrums.cluster_labels==label)[0]
-                cluster_center = np.mean(mp_spectrums.dist_flat[indexs])
-                
-                xs = np.concatenate( [ xs_list[i] for i in indexs ] )
-                ys = np.concatenate( [ ys_list[i] for i in indexs ] )
-                    
-                ax.scatter(xs, ys, marker="x", c=_CM[label%len(_CM)], alpha=0.8, label=f"c{label} = {cluster_center :.2f}")
-            ax.legend()
-            # the plotting mode would change from image to scatter so we need to fip the y-axis and constraint the x, y range
-            ax.set_ylim(self.pattern.shape[0], 0)
-            ax.set_xlim(0, self.pattern.shape[1])
-
+        if show_axes:
             ax.set_xlabel("x (pixel)")
             ax.set_ylabel("y (pixel)")
+        else:
+            ax.set_axis_off()
 
         return fig, ax
 
     def get_fft(self, center=True):
+        """Compute the fast fourier transform of the RHEED pattern
+
+        Args:
+            center (bool, optional): Use image center as origin. Defaults to True.
+
+        Returns:
+            complex ndarray: fourier transform of the pattern
+            real ndaray: Magnitude or |c| of the fourier transform
+        """
+        
         img = self.pattern
         f = np.fft.fft2(img)
         if center: f = np.fft.fftshift(f)
@@ -530,8 +543,22 @@ class Rheed:
         self.fft_center = center
         self.fft_mag = magnitude_spectrum
         return f, magnitude_spectrum
+
     
     def fft_reconstruct(self, window_x, window_y, inplace=True):
+        """Reconstruct the RHEED pattern from the whole or partial fft.
+        A window with a width of 2*window_x and height of 2*window_y could
+        be specified to limit the fourier component that would be used to
+        do the reconstruction (only the one within the window would be used)        
+
+        Args:
+            window_x (int): window x
+            window_y (int): window y
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True.
+
+        Returns:
+            Rheed: return a new object or update the current object
+        """
         fft = self.fft.copy()
         rows, cols = self.fft.shape
         crow,ccol = int(rows/2) , int(cols/2)
@@ -540,7 +567,18 @@ class Rheed:
         recon = np.fft.ifft2(fft)
         return self._update_pattern(np.abs(recon), inplace)
 
+
     def plot_fft(self, ax=None, **fig_kargs):
+        """Plot the fast fourier transform of the pattern with matplotlib
+
+        Args:
+            ax (matplotlib.pyplot.Axes, optional): Figure's Axes. Defaults to None.
+
+        Returns:
+            matplotlib.pyplot.Figure : plot's figure
+            matplotlib.pyplot.Axes : plot's axes
+        """        
+        
         fig, ax = _create_figure(ax, **fig_kargs)
         ax.imshow(self.fft_mag)
         ax.set_title('Magnitude Spectrum')
@@ -550,12 +588,37 @@ class Rheed:
         ax.set_xticklabels(ax.get_xticks().astype(int) - int(self.fft_mag.shape[1] // 2))
         return fig, ax
 
+
 class RheedMask():
+    """A Class that store a rheed object with a mask that label out the user
+    interest region. These mask could be generated from human or ML models.
+    It also provides tools for analyze and visualize not only the rheed pattern 
+    within the masks but also features that derived from the mask.
+    
+    """
     def __init__(self, rd:Rheed, mask:np.ndarray):
+        """Initializer of the RheedMask
+
+        Args:
+            rd (Rheed): a Rheed Object
+            mask (np.ndarray): the bindary mask
+        """
         self.rd = rd
         self.mask = mask
 
-    def crop(self, sx, sy, ex, ey, inplace=False):
+    def crop(self, sx, sy, ex, ey, inplace=False):        
+        """crop the rheed object and the mask by the given corner points. 
+
+        Args:
+            sx (int): crop starting x position
+            sy (int): crop starting y position
+            ex (int): crop end x position
+            ey (int): crop end y position
+            inplace (bool, optional): the operated result would overwrite the stored pattern and mask if True. Defaults to True.
+
+        Returns:
+            RheedMask: either itself or a newly created RheedMask obj       
+        """
         if inplace:
             self.rd = self.rd.crop(sx, sy, ex, ey, inplace=inplace)
             self.mask = crop(self.mask, sx, sy, ex, ey)
@@ -565,7 +628,17 @@ class RheedMask():
             mask = crop(self.mask, sx, sy, ex, ey)
             return RheedMask(rd, mask)
 
+
     def get_regions(self, with_intensity=False):
+        """Get all the connected regions in the binary mask.
+        See skimage.measure.regionprops and skimage.measure.label for more details
+
+        Args:
+            with_intensity (bool, optional): keep region's intensity value in the out. Defaults to False.
+
+        Returns:
+            list : list of RegionProperties
+        """
         # labeling:dict -> store
         # regions:dict -> store
         # regions primary key -> (name, id)
@@ -576,28 +649,76 @@ class RheedMask():
             self.regions = regionprops(self.label)
         return self.regions
 
+
     def filter_regions(self, min_area, inplace=True):
+        """remove regions that has very small areas.
+
+        Args:
+            min_area (float): minimum value of a region's area 
+            inplace (bool, optional): inplace (bool, optional): the operated result would overwrite the stored regions if True. Defaults to True.
+
+        Returns:
+            list : list of RegionProperties
+        """
         filtered = [ r for r in self.regions if r.area >= min_area ]
         if inplace: self.regions = filtered
         return [ r for r in self.regions if r.area >= min_area ]
 
+
     def get_region_collapse(self, region, direction="h"):
+        """Compute integral spectrum from a given region
+
+        Args:
+            region (RegionProperties): a region with bounding box information
+            direction (str, optional): direction of integration.
+                'h' integrate over row direction and 'v' integrate
+                over column direction. Defaults to "h".
+
+        Returns:
+            CollapseSpectrum: the 1d integration of pattern within the region
+        """
         sx, sy, ex, ey = region.bbox
         if direction == "h":
             cs = CollapseSpectrum.from_rheed_horizontal(self.rd, sx, sy, ex, ey)
-        else:
+        elif direction == "v":
             cs = CollapseSpectrum.from_rheed_vertical(self.rd, sx, sy, ex, ey)
+        else:
+            raise ValueError(f"Unknown direction : {direction}")
         return cs
 
+
     def get_regions_collapse(self, direction="h"):
+        """Compute integral spectrum from every region that stored in the objects
+
+        Args:
+            direction (str, optional): direction of integration.
+                'h' integrate over row direction and 'v' integrate
+                over column direction. Defaults to "h".
+
+        Returns:
+            List[CollapseSpectrum]: list of the 1d integration of pattern
+        """        
+        
         # collapse :list[1d spectrums] -> store
         self.collapses = []
         for region in self.regions:
             cs = self.get_region_collapse(region, direction)
             self.collapses.append(cs)
         return self.collapses
-    
-    def clean_collapse(self, smooth=True, rm_bg=True, scale=True):
+
+
+    def clean_collapse(self, smooth:bool=True, rm_bg:bool=True, scale:bool=True):
+        """A warp method that perform normalization, gaussian smoothing, and 
+        remove background to all the extracted integrated region spectrums.
+
+        Args:
+            smooth (bool, optional): perform gaussian smoothing. Defaults to True.
+            rm_bg (bool, optional): remove background. Defaults to True.
+            scale (bool, optional): use mean and std to scale the spectrum. Defaults to True.
+
+        Returns:
+            RheedMask: return the object itself
+        """
         for cs in self.collapses:
             if rm_bg:
                 try:
@@ -608,14 +729,34 @@ class RheedMask():
             if smooth: cs.smooth()
         return self
 
-    def fit_collapse_peaks(self, height, threshold, prominence):
+
+    def fit_collapse_peaks(self, height:float, threshold:float, prominence:float):
+        """Use the peak finding algorihm to get every peaks in every integrated region spectrums. 
+        See scipy.signal.find_peaks for more details.
+
+        Args:
+            height (float): Required height of peaks. Either a number, None, an array matching 
+                x or a 2-element sequence of the former. The first element is always interpreted 
+                as the minimal and the second, if supplied, as the maximal required height.
+            threshold (float): Required threshold of peaks, the vertical distance to its neighboring samples. 
+                Either a number, None, an array matching x or a 2-element sequence of the former. The first 
+                element is always interpreted as the minimal and the second, if supplied, as the maximal 
+                required threshold.
+            prominence (float): Required prominence of peaks. Either a number, None, an array matching x 
+                or a 2-element sequence of the former. The first element is always interpreted as the 
+                minimal and the second, if supplied, as the maximal required prominence.
+        Returns:
+            list: a list of all spectrums peaks's index w.r.t spectrums
+            list: a list of all spectrums peaks position in image x coordinate
+            list: a list of all spectrums peaks properties
+        """
         # peaks dict : list->
         self.collapses_peaks = []
         self.collapses_peaks_ws = []
         self.collapses_peaks_info = []
         for cs in self.collapses:
             if cs is not None:
-                peaks, peaks_info = cs.fit_spectrum_peaks(height=height, threshold=threshold, prominence=prominence)
+                peaks, peaks_info = cs.find_spectrum_peaks(height=height, threshold=threshold, prominence=prominence)
                 self.collapses_peaks.append( peaks )
                 self.collapses_peaks_ws.append( cs.ws[peaks] )
                 self.collapses_peaks_info.append( peaks_info )
@@ -627,7 +768,14 @@ class RheedMask():
         self.collapses_peaks_regions = [ [i]*len(ps) for i, ps in enumerate(self.collapses_peaks) ]
         return self.collapses_peaks, self.collapses_peaks_ws, self.collapses_peaks_info
 
+
     def get_top_region(self):
+        """Get the region that is cloest to the top of the RHEED pattern.
+
+        Returns:
+            RegionProperties: the top region
+            int: region id
+        """
         topx = self.rd.pattern.shape[0]
         topr = None
         topr_i  = -1
@@ -638,18 +786,42 @@ class RheedMask():
                 topx = r.centroid[0]
         return topr, topr_i
 
+
     def _get_region_centroid(self, region):
         centroid = region.weighted_centroid if hasattr(region, "weighted_centroid") else region.centroid
         xy = centroid
         return xy
 
+
     def get_close_region(self, x, y):
+        """Find the one among the whole extracted regions that has the smallest distance between
+        the input coordinates and its centroid.
+
+        Args:
+            x (float): x coordinate
+            y (float): y coordinate
+
+        Returns:
+            (RegionProperties): the region
+            (int): the region's id
+        """
         centroids = np.stack([ self._get_region_centroid(region) for region in self.regions ], axis=0)
         dists = np.linalg.norm(centroids - np.array([x,y]), axis=1)
         i = np.argmin(dists)
         return self.regions[i], i
-    
-    def get_region_within(self, x, y):
+
+
+    def get_region_within(self, x:int, y:int):
+        """Get the first region that its mask contain (x, y)
+
+        Args:
+            x (int): x coordinate 
+            y (int): y coordinate
+
+        Returns:
+            RegionProperties: the top region
+            int: region id
+        """
         for i, r in enumerate(self.regions):
             sx, sy, ex, ey = r.bbox
             within_box_x = x >= sx and x <= ex
@@ -661,7 +833,22 @@ class RheedMask():
         else:
             return None, None
 
+
     def get_direct_beam(self, method="top", tracker=None, track=None):
+        """Find the direct beam of the rheed pattern using heuristic or a
+        iou tracker. When method is set to 'top', the method would select the
+        region that is cloest to the top as the direct beam. 'top+tracker' is 
+        similar but it also register the discovered region to the tracker. 
+        'tracker', on the other hand, would completely rely on tracker to find
+        the region in the current obj that follow the historic movement of the 
+        direct beam. The tracker we demonstrated here is an simply IOU tracker
+        but it could be extended to other fancy methods.
+
+        Args:
+            method (str, optional): _description_. Defaults to "top".
+            tracker (_type_, optional): _description_. Defaults to None.
+            track (_type_, optional): _description_. Defaults to None.
+        """
         def _get_centroid(r_i):
             r = self.regions[r_i]
             return self._get_region_centroid(r)
@@ -697,6 +884,7 @@ class RheedMask():
         #     assert len(peaks_w) == 1, f"found {len(peaks)} peaks in {d} direction"
         #     xy.append(peaks_w[0])
 
+
     def _flatten_peaks(self):
         self.collapses_peaks_ws_flatten = np.array(list(itertools.chain.from_iterable(self.collapses_peaks_ws)))
         self.collapses_peaks_flatten = np.array(list(itertools.chain.from_iterable(self.collapses_peaks)))
@@ -710,7 +898,18 @@ class RheedMask():
         self.collapses_peaks_flatten_regions = self.collapses_peaks_flatten_regions[sortidxs]
         return self.collapses_peaks_ws_flatten
 
+
     def analyze_peaks_distance_cent(self, tolerant=0.01, abs_tolerant=10, allow_discontinue=1):
+        """Apply periodic analysis to all intergrated region spectrum. 
+
+        Args:
+            tolerant (float, optional): _description_. Defaults to 0.01.
+            abs_tolerant (int, optional): _description_. Defaults to 10.
+            allow_discontinue (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            _type_: _description_
+        """
         allpeaks = self._flatten_peaks()
 
         ci = get_center_peak_idx(allpeaks, self.rd.pattern.shape[1]//2, abs_tolerant)
@@ -743,6 +942,7 @@ class RheedMask():
 
         return self.collapses_peaks_flatten_ana_res
 
+
     def plot_pattern_masks(self, ax=None, name=None, regions=True, split=False):
         # plot pattern and mask
         fig, ax = _create_figure(ax=ax)
@@ -750,6 +950,7 @@ class RheedMask():
         self.rd.plot_pattern(ax)
         ax.imshow(self.mask, alpha=0.7)
         return fig, ax
+
 
     def plot_region(self, region_id, zoom=True, ax=None, **fig_kargs):
         fig, ax = _create_figure(ax=ax, **fig_kargs)
@@ -773,6 +974,7 @@ class RheedMask():
 
         return fig, ax
 
+
     def plot_regions(self, ax=None, zoom=False, min_area=0, centroid=False,**fig_kargs):
         fig, ax = _create_figure(ax=ax, **fig_kargs)
         # image_label_overlay = label2rgb(self.label, image=self.rd.pattern, bg_label=0)
@@ -795,6 +997,7 @@ class RheedMask():
         
         return fig, ax
 
+
     def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True):
         fig, ax = _create_figure(ax)
         
@@ -812,6 +1015,7 @@ class RheedMask():
                     ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
         
         return fig, ax
+
 
     def get_group_intensity(self):
         # max_width??
