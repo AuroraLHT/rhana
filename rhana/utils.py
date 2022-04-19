@@ -54,13 +54,13 @@ def crop(img, sx, sy, ex, ey):
 
 class Timeout:
     """
-        Ref: https://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
-        A timeout class for killing code pieces that run too long
-        
-        Example:
-            import time
-            with timeout(seconds=3):
-                time.sleep(4)
+    Ref: https://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
+    A timeout class for killing code pieces that run too long
+    
+    Example:
+        import time
+        with timeout(seconds=3):
+            time.sleep(4)
     """
     def __init__(self, seconds=1, error_message='Timeout'):
         self.seconds = seconds

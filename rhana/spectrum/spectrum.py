@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List, Dict, Union, Optional
 from dataclasses import dataclass, field, fields
 from collections import namedtuple
+# from copy import deepcopy
 
 import numpy as np
 
@@ -44,7 +45,7 @@ def get_peaks_distance(peaks_idx:List[int], peaks_w:List[float], full=False, pol
         full (bool): return the full distance matrix if set True
         polar (bool): turn the lower triangle of the matrix negative
     
-    Return:
+    Returns:
         np.array : a len(peaks_w) x len(peaks_w) distance matrix
     """
     if len(peaks_w.shape) == 1:
@@ -64,11 +65,13 @@ def get_peaks_distance(peaks_idx:List[int], peaks_w:List[float], full=False, pol
 def create_grid(start:float, end:float, center:float, dist:float):
     """ 
     Generate a grid with spaceing 'dist', that center at 'center', range from 'start - center' to 'end - center' 
+    
     Args:
         start (float) : grid starting position
         end (float) : grid end position
         center (float) : the grid origin
         dist (float) : the grid spacing
+        
     Returns:
         np.array : a grid 
     """
@@ -252,14 +255,13 @@ class PeakAnalysisResult:
 
 @dataclass
 class Spectrum:
-    """
-        The Spectrum class is built to abstractalize all spectral data.
-        we use ws to store spectrum x-axes values instead xs since xs is 
-        first used as the index in our code.
+    """The Spectrum class is built to abstractalize all spectral data.
+    we use ws to store spectrum x-axes values instead xs since xs is 
+    first used as the index in our code.
         
-        Args:
-            spec (np.array): The spectrum values
-            ws (np.array): The spectrum x coordinate values        
+    Args:
+        spec (np.array): The spectrum values
+        ws (np.array): The spectrum x coordinate values        
         
     """
 
@@ -267,16 +269,17 @@ class Spectrum:
     ws: np.ndarray = field(metadata="the location of the intensity stored in an array form")
 
     def copy(self):
-        """
-            copy the spectrum object
+        """copy the spectrum object
+        
+        Returns:
+            Spectrum : a new spectrum
         """
         
         return self._update_spectrum(self.spec[...], self.ws[...], inplace=False)
 
     def _update_spectrum(self, spec, ws, inplace=True, **kargs):
-        """
-            do an update in the current spectrum's field or create a
-            new spectrum and do update over that object.
+        """do an update in the current spectrum's field or create a
+        new spectrum and do update over that object.
         """
 
         if inplace:
@@ -298,18 +301,17 @@ class Spectrum:
         return self._update_spectrum(self.spec[mask], self.ws[mask], inplace=inplace)
 
     def interpolate(self, ws, fill_value=0, kind='linear', assume_sorted=True, inplace=True):
-        """
-            Perform interplaction on the spectrum given a new location ws
+        """Perform interplaction on the spectrum given a new location ws
 
-            Arguments:
-                ws : a new location to interpolation on
-                fill_value : the constant to fill when location is outside the range of the spectrum
-                kind : interpolation method. Could be 'linear', 'nearest', 'nearest-up', 'zero', 'slinear', 'quadratic', 'cubic', 'previous', or 'next'.
-                assume_sorted : assume x is monotonically increasing value
-                inplace : update the current spectrum or create a new spectrum
+        Args:
+            ws : a new location to interpolation on
+            fill_value : the constant to fill when location is outside the range of the spectrum
+            kind : interpolation method. Could be 'linear', 'nearest', 'nearest-up', 'zero', 'slinear', 'quadratic', 'cubic', 'previous', or 'next'.
+            assume_sorted : assume x is monotonically increasing value
+            inplace : update the current spectrum or create a new spectrum
 
-            Return: 
-                Spectrum : the original or a new spectrum
+        Returns: 
+            Spectrum : the original or a new spectrum
         """
 
         f = interp1d(self.ws, self.spec, bounds_error=False, fill_value=fill_value, kind=kind, assume_sorted=assume_sorted)
@@ -373,7 +375,7 @@ class Spectrum:
         """
         Savitzky-Golay filter for noise reduction. Parameters see scipy.signal.savgol_filter
         
-        Arga:
+        Args:
             window_length : The length of the filter window (i.e., the number of coefficients). Must be odd
             polyorder : The order of the polynomial used to fit the samples. polyorder must be less than window_length.
             deriv : The order of the derivative to compute. This must be a nonnegative integer. 
@@ -665,10 +667,10 @@ class Spectrum:
 
         Return a list of the grouped peaks and their average peak distance 
         
-        Argument:
-            ana_res: list of PeakAnalysisResult
-            peaks: fitted peaks
-            exclusive: not allow one peak position to be occupy many time if True
+        Args:
+            ana_res (list): list of PeakAnalysisResult
+            peaks (list): fitted peaks
+            exclusive (bool, optional): not allow one peak position to be occupy many time if True
             
         Returns:
             List : a list of peakgroups
@@ -743,6 +745,7 @@ class Spectrum:
                 else:
                     raise e
         return self
+
 
 @dataclass
 class CollapseSpectrum(Spectrum):

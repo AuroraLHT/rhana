@@ -1,3 +1,7 @@
+"""
+This modulu is not use in the Rheed Paper. Intially we want to do curve fitting. Since the rheed
+spectrum shape is not that well defined, we abandon this idea later on. 
+"""
 import re
 from dataclasses import dataclass
 from pathlib import Path
