@@ -1,10 +1,35 @@
 import copy
 import numpy as np
 
-def regions2detections(regions):    
-     return [ {'bbox':r.bbox, 'image':r.image, 'area':r.area, 'region_id':i} for i, r in enumerate(regions) ]
+def regions2detections(regions):
+    """Convert region from skimage to detections format used object detection
+
+    Args:
+        regions (List [RegionProperties]): list of RegionProperties that needed to be converted
+
+    Returns:
+        List: a list of detections 
+    """
+    return [ {'bbox':r.bbox, 'image':r.image, 'area':r.area, 'region_id':i} for i, r in enumerate(regions) ]
+
 
 def overlap_rect(bbox1, bbox2):
+    """Compute overlapped corner between two bounding boxes
+    
+    Bounding box style:
+        (Upper Left x, Upper Left y, Lower right x, Lower right y)
+
+    Args:
+        bbox1 (Array): bounding box 1
+        bbox2 (Array): bounding box 1
+
+    Returns:
+        float: Upper Left overlap x
+        float: Upper Left overlap y
+        float: Lower Right overlap x
+        float: Lower Right overlap y
+        
+    """
     (x0_1, y0_1, x1_1, y1_1) = bbox1
     (x0_2, y0_2, x1_2, y1_2) = bbox2
 
@@ -19,9 +44,10 @@ def overlap_rect(bbox1, bbox2):
 def iou_bbox(bbox1, bbox2):
     """
     Calculates the intersection-over-union of two bounding boxes.
+    
     Args:
-        bbox1 (numpy.array, list of floats): bounding box in format x1,y1,x2,y2.
-        bbox2 (numpy.array, list of floats): bounding box in format x1,y1,x2,y2.
+        bbox1 (Array): bounding box in the format of x1,y1,x2,y2.
+        bbox2 (Array): bounding box in the format of x1,y1,x2,y2.
     Returns:
         int: intersection-over-onion of bbox1, bbox2
     """
@@ -43,6 +69,21 @@ def iou_bbox(bbox1, bbox2):
     return size_intersection / size_union
 
 def iou(bbox1, bbox2, image1, image2, area1, area2):
+    """Compute the intersection-over-union of two instance segmentation mask.
+    To clarify, image1 and image2 is the two bindary masks. area1 and area2 are the
+    areas of mask bounded by the bboxs. 
+
+    Args:
+        bbox1 (Array): bounding box in the format of x1,y1,x2,y2.
+        bbox2 (Array): bounding box in the format of x1,y1,x2,y2.
+        image1 (Array): a bindary mask
+        image2 (Array): a bindary mask
+        area1 (float): area of the mask enclosed by the bbox
+        area2 (float): area of the mask enclosed by the bbox
+
+    Returns:
+        float: iou value
+    """
     bbox_overlap = iou_bbox(bbox1, bbox2)
     if bbox_overlap > 0 :
         overlap_x0, overlap_y0, overlap_x1, overlap_y1 = overlap_rect(bbox1, bbox2)
@@ -62,7 +103,16 @@ def iou(bbox1, bbox2, image1, image2, area1, area2):
         return 0
 
 class IOUTracker:
+    """A simple tracker that trace the movement of a particular object by connective the
+    bounding boxes with the highest IOU value between two consecutive frames.
+    """
     def __init__(self, t_min=2, sigma_iou=0.5):
+        """IOUTracker initializer
+
+        Args:
+            t_min (int, optional): Number of frames that required to set the trace to be terminate. Defaults to 2.
+            sigma_iou (float, optional): the minimum iou value for two bounding boxes to be treated as from the same trace. Defaults to 0.5.
+        """
         self._tracks_active = []
         self._tracks_finished = []
         self.t_min= t_min
@@ -72,16 +122,36 @@ class IOUTracker:
         self.track2region = {}
     
     def track_id(self):
+        """Generate a new track_id
+
+        Returns:
+            int: a new track id
+        """
         old_id = self._track_id
         self._track_id += 1
         return old_id
     
     @property
     def tracks(self):
+        """Get both active and terminated traces.
+
+        Returns:
+            list: all the discovered trace
+        """
         tracks = self._tracks_finished + self._tracks_active
         return tracks
     
     def update(self, detections, frame_num):
+        """Use the detections extracted from the current frame to update
+        the tracker. Use 'regions2detections' to convert region to this format.
+
+        Args:
+            detections (dict): object detection style.
+            frame_num (int): frame number of the current frame
+
+        Returns:
+            dict: a mapping between regions in the current and trace stored in the tracker.
+        """
         detections = copy.copy(detections)
         updated_tracks = []
         region2track = {}
@@ -131,7 +201,18 @@ class IOUTracker:
         return region2track
         
 class IOUMaskTracker:
+    """ A simple tracker that trace the movement of a particular object by connective the
+    bounding boxes with the highest IOU value between two consecutive frames.
+    Similar to IOUTracker but use mask with bounding box to compute the IOU value.
+    """
     def __init__(self, t_min=2, sigma_iou=0.5):
+        """IOUMaskTracker initializer
+
+        Args:
+            t_min (int, optional): Number of frames that required to set the trace to be terminate. Defaults to 2.
+            sigma_iou (float, optional): the minimum iou value for two bounding boxes to be treated as from the same trace. Defaults to 0.5.
+        """        
+        
         self._tracks_active = []
         self._tracks_finished = []
         self.t_min= t_min
@@ -141,16 +222,38 @@ class IOUMaskTracker:
         self.track2region = {}
     
     def track_id(self):
+        """Get both active and terminated traces.
+
+        Returns:
+            list: all the discovered trace
+        """       
+
         old_id = self._track_id
         self._track_id += 1
         return old_id
     
     @property
     def tracks(self):
+        """Get both active and terminated traces.
+
+        Returns:
+            list: all the discovered trace
+        """        
         tracks = self._tracks_finished + self._tracks_active
         return tracks
     
     def update(self, detections, frame_num):
+        """Use the detections extracted from the current frame to update
+        the tracker. Use 'regions2detections' to convert region to this format.
+
+        Args:
+            detections (dict): object detection style.
+            frame_num (int): frame number of the current frame
+
+        Returns:
+            dict: a mapping between regions in the current and trace stored in the tracker.
+        """        
+        
         detections = copy.copy(detections)
         updated_tracks = []
         region2track = {}
@@ -200,5 +303,3 @@ class IOUMaskTracker:
         self.region2track = region2track
         self.track2region = {v:k for k, v in self.region2track.items()}
         return region2track
-        
-    

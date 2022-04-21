@@ -198,10 +198,10 @@ class Rheed:
             min_max_scale (bool, optional): scale pattern to 0 and 1. Defaults to False.
             standard_norm (bool, optional): scale pattern by mean and std. Defaults to False.
             AOI (np.array, optional): a 2d mask that cover the area of interest. Defaults to None.
-            config (_type_, optional): _description_. Defaults to None.
+            config (RheedConfig, optional): Rheed experimental configuration.. Defaults to None..
 
         Returns:
-            _type_: _description_
+            Rheed: an instantiated rheed obj
         """
         img = Image.open(path)
         if rotate != 0 :
@@ -324,7 +324,7 @@ class Rheed:
                 The absolute lower bound for scale space maxima. Local maxima smaller than thresh are ignored. Reduce this to detect blobs with less intensities.
 
         Returns
-            Array : an array of blogs
+            Array: an array of blogs
 
         """
         blobs_log = blob_log(self.pattern, max_sigma=max_sigma, num_sigma=num_sigma, threshold=threshold, **blob_kargs)
@@ -340,12 +340,12 @@ class Rheed:
         plot the blobs location on the RHEED pattern
         
         Args:
-            img : RHEED pattern image
-            blobs : output from blobs detection algorithm or get_blobs()
+            blob_color (str, optional): the color of the blob
+            ax (matplotlib.pyplot.Axes): plot's figure
             
-        Return:
-            Matplotlib.pyplot.Figure
-            Matplotlib.pyplot.Axes
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's figure
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
@@ -365,8 +365,8 @@ class Rheed:
             ax (matplotlib.pyplot.Axes): figure's axes. Defaults to None
                 
         Returns:
-            matplotlib.pyplot.Figure : plot's figure
-            matplotlib.pyplot.Axes : plot's figure
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's figure
         """    
     
         if hasattr(self, "xy") and hasattr(self, "r"):
@@ -381,8 +381,8 @@ class Rheed:
             rmin : minimum radius for a spot to be selected
             
         Returns:
-            Array : blob x and y
-            int : blob id
+            Array: blob x and y
+            int: blob id
         """
         def get_top_blob(blobs):
             top = np.inf
@@ -409,8 +409,8 @@ class Rheed:
             rmin (float): minimum radius for a spot to be selected
         
         Returns:
-            Array : blob x and y
-            int : blob id
+            Array: blob x and y
+            int: blob id
         """
         
         dbx, dby, dbr = self.blobs[self.db_i]
@@ -433,8 +433,8 @@ class Rheed:
         Need to run get_direct_beam and get_specular_spot methods first.
         
         Returns:
-            Array : 0-zero order Laue circle center's x and y
-            float : 0-zero order Laue circle radius
+            Array: 0-zero order Laue circle center's x and y
+            float: 0-zero order Laue circle radius
         """
         if hasattr(self, "db") and hasattr(self, "ss") and self.db is not None and self.ss is not None:
             dbx, dby, dbr = self.blobs[self.db_i]
@@ -460,8 +460,8 @@ class Rheed:
             ax (matplotlib.pyplot.Axes, optional): figure's axes. Defaults to None.
             
         Returns:
-            matplotlib.pyplot.Figure : plot's figure
-            matplotlib.pyplot.Axes : plot's figure
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's figure
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
@@ -476,7 +476,7 @@ class Rheed:
         """Plot pattern with interactive plotly backend
 
         Returns:
-            _plotly.graph_objects.Figure: Plotly graph
+            plotly.graph_objects.Figure: Plotly graph
         """
 
         fig = go.Figure(**fig_kargs)
@@ -575,8 +575,8 @@ class Rheed:
             ax (matplotlib.pyplot.Axes, optional): Figure's Axes. Defaults to None.
 
         Returns:
-            matplotlib.pyplot.Figure : plot's figure
-            matplotlib.pyplot.Axes : plot's axes
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's axes
         """        
         
         fig, ax = _create_figure(ax, **fig_kargs)
@@ -637,7 +637,7 @@ class RheedMask():
             with_intensity (bool, optional): keep region's intensity value in the out. Defaults to False.
 
         Returns:
-            list : list of RegionProperties
+            list: list of RegionProperties
         """
         # labeling:dict -> store
         # regions:dict -> store
@@ -658,7 +658,7 @@ class RheedMask():
             inplace (bool, optional): inplace (bool, optional): the operated result would overwrite the stored regions if True. Defaults to True.
 
         Returns:
-            list : list of RegionProperties
+            list: list of RegionProperties
         """
         filtered = [ r for r in self.regions if r.area >= min_area ]
         if inplace: self.regions = filtered
@@ -802,8 +802,8 @@ class RheedMask():
             y (float): y coordinate
 
         Returns:
-            (RegionProperties): the region
-            (int): the region's id
+            RegionProperties: the region
+            int: the region's id
         """
         centroids = np.stack([ self._get_region_centroid(region) for region in self.regions ], axis=0)
         dists = np.linalg.norm(centroids - np.array([x,y]), axis=1)
@@ -901,14 +901,19 @@ class RheedMask():
 
     def analyze_peaks_distance_cent(self, tolerant=0.01, abs_tolerant=10, allow_discontinue=1):
         """Apply periodic analysis to all intergrated region spectrum. 
+        See "spectrum.spectrum.analyze_peaks_distance_cent" for more details
+        
+        The actual tolerant which define the maximum allowed deviation between computed next peak in 
+        the family and the actual peaks locaitons
+            act_tolerant = min(tolerant * dist, abs_tolerant)
 
         Args:
-            tolerant (float, optional): _description_. Defaults to 0.01.
-            abs_tolerant (int, optional): _description_. Defaults to 10.
+            tolerant (float, optional): relative tolerant. Defaults to 0.01.
+            abs_tolerant (int, optional): absolute tolerant. Defaults to 10.
             allow_discontinue (int, optional): _description_. Defaults to 1.
-
+            allow_discontinue (int, optional): allowed discontinity when searching peaks. Defaults to 1.
         Returns:
-            _type_: _description_
+            list: a list of spectrum.spectrum.PeakAnalysisDetail
         """
         allpeaks = self._flatten_peaks()
 
@@ -943,7 +948,17 @@ class RheedMask():
         return self.collapses_peaks_flatten_ana_res
 
 
-    def plot_pattern_masks(self, ax=None, name=None, regions=True, split=False):
+    def plot_pattern_masks(self, ax=None):
+        """Plot the pattern with the mask overlay
+
+        Args:
+            ax (matplotlib.pyplot.Axes, optional): plot's axes. Defaults to None.
+
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's axes
+        """
+        
         # plot pattern and mask
         fig, ax = _create_figure(ax=ax)
 
@@ -952,7 +967,19 @@ class RheedMask():
         return fig, ax
 
 
-    def plot_region(self, region_id, zoom=True, ax=None, **fig_kargs):
+    def plot_region(self, region_id:int, zoom:bool=True, ax=None, **fig_kargs):
+        """Plot one region in the form of bounding box. An inset plot of the pattern within the region
+        is also inserted if zoom is set to true.
+
+        Args:
+            region_id (int): the region id you want to plot
+            zoom (bool, optional): Plot the pattern bounded by the region if set to True. Defaults to True.
+            ax (matplotlib.pyplot.Axes, optional): The plot's axes. Defaults to None.
+
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's axes
+        """
         fig, ax = _create_figure(ax=ax, **fig_kargs)
         self.rd.plot_pattern(ax=ax)
 
@@ -975,7 +1002,19 @@ class RheedMask():
         return fig, ax
 
 
-    def plot_regions(self, ax=None, zoom=False, min_area=0, centroid=False,**fig_kargs):
+    def plot_regions(self, ax=None, min_area:float=0.0, centroid=False,**fig_kargs):
+        """Plot all extracted regions from the mask.
+
+        Args:
+            ax (matplotlib.pyplot.Axes, optional): _description_. Defaults to None.
+            min_area (float, optional): Regions with area higher than this value would be shown. Defaults to 0.
+            centroid (bool, optional): Plot the centroid location if True. Defaults to False.
+
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's axes
+        """
+        
         fig, ax = _create_figure(ax=ax, **fig_kargs)
         # image_label_overlay = label2rgb(self.label, image=self.rd.pattern, bg_label=0)
 
@@ -999,6 +1038,18 @@ class RheedMask():
 
 
     def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True):
+        """Plot the extracted peak family periodicity. Call this method when finish the 
+        periodicity analysis first.
+
+        Args:
+            ax (matplotlib.pyplot.Axes, optional): plot's axes. Defaults to None.
+            dist_text_color (str, optional): text color of the periodicity. Defaults to "white".
+            show_text (bool, optional): show the exact periodicity on the figure if set to True. Defaults to True.
+
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's axes
+        """
         fig, ax = _create_figure(ax)
         
         self.rd.plot_pattern(ax=ax)
@@ -1018,6 +1069,17 @@ class RheedMask():
 
 
     def get_group_intensity(self):
+        """Get the total intensity and the relative intensity of each periodicity. If the region corresponding 
+        to only one peak family, the sum of the intensity within a region is the group intensity. If there are more than one 
+        peak families, a gaussian mixture model would used to fit the spectrum and the width of the gaussian is used to
+        estimate the corresponding region of its corresponding family. The group intensity is the sum of that region instead.
+
+        Relative intensity = Group Intensity / Sum(Group Intensity)
+
+        Returns:
+            Array: group intensity
+            Array: relative group intensity
+        """
         # max_width??
         gauss_fit = {}
         group_intensity = np.zeros(len(self.cluster_labels_unique))
@@ -1026,7 +1088,7 @@ class RheedMask():
 
         for i, ul in enumerate(self.cluster_labels_unique):
             group_mask = np.zeros(self.rd.pattern.shape, dtype=bool)
-            selected = [ self.collapses_peaks_flatten_ana_res[i] for i, cl in enumerate(self.cluster_labels) if cl == ul ]
+            selected = [self.collapses_peaks_flatten_ana_res[i] for i, cl in enumerate(self.cluster_labels) if cl == ul]
             
             for j, ana in enumerate(selected):
                 for p in ana.peaks_family:
