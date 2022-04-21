@@ -121,6 +121,7 @@ data
 learner
 
 # notebook
+notebook/tmp
 notebook/result
 notebook/publication
 
@@ -133,7 +134,10 @@ README_example.md
 README_pytorch.md
 
 # old version
+old
 *.old
 
 # other file
 other/*
+
+
