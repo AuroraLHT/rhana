@@ -1,3 +1,4 @@
+plotly
 colorlover
 fastai
-lmfit == 1.0.2
+lmfit
