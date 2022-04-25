@@ -110,7 +110,7 @@ class RHEEDTensorImage(TensorImage):
         self.chnls_first = chnls_first
 
     @classmethod
-    def create(cls, data:(Path, str, ndarray), chnls_first=True):
+    def create(cls, data:Union[Path, str, ndarray], chnls_first=True):
         """Create a RHEEDTensorImage object from multiple different sources
 
         Args:
@@ -172,7 +172,7 @@ class RHEEDTensorMask(TensorMask):
         self.chnls_first = chnls_first
 
     @classmethod
-    def create(cls, data:(Path, str, ndarray, pd.Series), chnls_first:bool=True, shape:Union[List, Tuple]=None):
+    def create(cls, data:Union[Path, str, ndarray, pd.Series], chnls_first:bool=True, shape:Union[List, Tuple]=None):
         """Create a RHEEDTensorMask object from multiple different sources
 
         Args:

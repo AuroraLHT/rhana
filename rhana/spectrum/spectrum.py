@@ -424,7 +424,7 @@ class Spectrum:
         return self._update_spectrum( np.clip( self.spec, clip_min, clip_max ), self.ws, inplace=inplace )
 
     # Backgroun subtraction
-    def remove_background(self, n=5, split=[], inplace=True):
+    def remove_background(self, n=5, split=None, inplace=True):
         """ 
         Assuming the background error is in linear form.
         Fit a linear line from n data points at the beginning and the end of the spectrum.
@@ -440,6 +440,8 @@ class Spectrum:
         """
         x = self.ws
         y = self.spec
+        
+        split = [] if split is None else split
 
         def _remove_background(x, y):
             if n > 1:
