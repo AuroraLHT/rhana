@@ -208,7 +208,16 @@ class Rheed:
             img = img.rotate(rotate)
         if crop_box is not None:
             img = img.crop(crop_box)
-        return cls(np.array(img)/255, min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
+
+        img = np.array(img)
+
+        if len(img.shape) == 3:
+            img = np.mean(img[:, :, :3], axis=2)
+
+        if img.max() > 1:
+            img = img / 255
+        
+        return cls(np.array(img), min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
 
     def mean_clip(self, inplace:bool=True):
