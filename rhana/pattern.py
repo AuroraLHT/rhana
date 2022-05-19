@@ -220,6 +220,21 @@ class Rheed:
         return cls(np.array(img), min_max_scale=min_max_scale, standard_norm=standard_norm, AOI=AOI, config=config)
 
 
+    def clip(self, min_v=0, max_v=1, inplace=True):
+        """ Clip the pattern by the given min and max value
+
+        Args:
+            min_v (float): the lowest intensity value before clip
+            max_v (float): the largest intensity value before clip
+            inplace (bool, optional): the operated result would overwrite the stored pattern if True. Defaults to True.
+
+        Returns:
+            Rheed: either itself or a newly created rheed obj
+        """
+        pattern = np.clip(self.pattern, min_v, max_v)
+        return self._update_pattern(pattern, inplace=inplace)
+        
+
     def mean_clip(self, inplace:bool=True):
         """Clip the value that below the average intensity to average intensity and shift the
         average intensity to 0. An effective way to remove noise.
