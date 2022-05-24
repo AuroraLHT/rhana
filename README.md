@@ -1,19 +1,19 @@
-# **Rh**eed **Ana**lysis
-
-Author lists
+# <span style="text-decoration:underline">Rh</span>eed <span style="text-decoration:underline">Ana</span>lysis
 
 An opensource library dedicated for analysis RHEED patterns and aim to extract information 
-for phase mapping and crystal growth monitoring using machine learning algorithm. Cite this: 
+for phase mapping and crystal growth monitoring using machine learning algorithm. Cite this: doi badge here
+
+Authors: Haotong Liang, Valentin Stanev, Aaron Gilad Kusne, Yuuto Tsukahra, Kaito Ito, Ryota Takahashi, Mikk Lippmaa, Ichiro Takeuchi
 
 ## Installation
-We haven't upload it to the Pypi yet, so mannul installation is required:
+
+Mannul installation is required for now:
 ```bash
-    git clone <project_url>
-    cd <project>
-    pip install -e .
+git clone https://github.com/AuroraLHT/rhana.git
+cd rhana
+pip install -e .
 ```
-The dependency should be all installed by pip automatically. Check the pytorch website on how to install a proper version 
- if you have issues related with fastai or pytorch.
+Dependencies should be resolved by pip automatically. Check the pytorch website on how to install a proper version  if you have issues related with fastai or [pytorch](https://pytorch.org/).
 
 ## Philosophy
 
@@ -23,11 +23,11 @@ The idea of this package is to provide tools to quickly analysis the RHEED patte
 
 | Name | Description | What you would get |
 | ---- | ----------- | ------------------ |
-| ApplyUNetwithTracking | Use U-Net to generate feature masks for every rheed patterns and also center and crop out the region of interest | Masks in run-line encoding (RLE) that is exported to a csv file |
-| DynamicPhaseChange | Observe how the pattern evolve over time | A  plot of variation in the relative intensity of each periodicity |
-| Fastaiv2UNetTraining | Train an U-Net model to predict masks for spots and streaks | A UNet model that is  |
-| MaterialMatching | Match materials from extracted periodicity | Phases that could be used to explain the RHEED pattern (heavily depend on experty in Materials Science) |
-| PhaseMap-PhaseAnalysis | Extract the coexisting phases among a combi experiment with RHEED | All periodicity could be found from a combi experiemnt and the "phase" composition of each sample computed from the relative intensity of each periodicity |
+| [ApplyUNetwithTracking](https://github.com/AuroraLHT/rhana/blob/main/notebook/ApplyUNetwithTracking.ipynb) | Use U-Net to generate feature masks for every rheed patterns and also center and crop out the region of interest | Masks in run-line encoding (RLE) that is exported to a csv file |
+| [DynamicPhaseChange](https://github.com/AuroraLHT/rhana/blob/main/notebook/DynamicPhaseChange.ipynb) | Observe how the pattern evolve over time | A  plot of variation in time of the relative intensity of each periodicity |
+| [Fastaiv2UNetTraining](https://github.com/AuroraLHT/rhana/blob/main/notebook/Fastaiv2Demo.ipynb) | Train an U-Net model to predict masks for spots and streaks | A UNet model  |
+| [MaterialMatching](https://github.com/AuroraLHT/rhana/blob/main/notebook/MaterialMatching.ipynb) | Match materials from extracted periodicity | Phases that could be used to explain the RHEED pattern (heavily depend on experty in Materials Science) |
+| [PhaseMap-PhaseAnalysis](https://github.com/AuroraLHT/rhana/blob/main/notebook/PhaseMap-PhaseAnalysis.ipynb) | Extract the coexisting phases among a combi experiment with RHEED | All periodicity could be found from a combi experiemnt and the "phase" composition of each sample computed from the relative intensity of each periodicity |
 
 
 ## Training Data Preparation
