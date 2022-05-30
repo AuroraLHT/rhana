@@ -21,7 +21,7 @@ The idea of this package is to provide tools to quickly analysis the RHEED patte
 
 ## Model
 
-The U-Net model could be downloaded from [here](https://drive.google.com/file/d/1gal9Fs7Z3cyOM6jvz0wbMaXf5IS4hs9Z/view?usp=sharing) and should be placed in the `learner` folder. To train your own model, please refer to the [Fastaiv2UNetTraining](https://github.com/AuroraLHT/rhana/blob/main/notebook/Fastaiv2Demo.ipynb) Notebook.
+The U-Net model could be downloaded from [here](https://drive.google.com/file/d/1gal9Fs7Z3cyOM6jvz0wbMaXf5IS4hs9Z/view?usp=sharing) and should be placed in the `learner` folder. To train your own model or reproduce the learner with the demo asset, please refer to the [Fastaiv2UNetTraining](https://github.com/AuroraLHT/rhana/blob/main/notebook/Fastaiv2Demo.ipynb) Notebook.
 
 
 ## Notebooks
