@@ -38,7 +38,8 @@ class UnetMasker:
         # shape = rd.pattern.shape
 
         inp = RHEEDTensorImage.create(np.tile(rd.pattern, (3, 1, 1)))
-        outputs = self.learn.predict(inp)
+        with self.learn.no_bar():
+            outputs = self.learn.predict(inp)
         scores = outputs[2]
         masks = scores > threshold
         classes = self.learn.classes # classes variable store which label is predicted channel-wise
