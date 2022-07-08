@@ -6,7 +6,6 @@ import pickle
 import numpy as np
 import pandas as pd
 
-
 from PIL import Image
 
 from scipy.ndimage.filters import gaussian_filter1d
@@ -258,7 +257,7 @@ class Rheed:
             self.pattern = pattern
             return self
         else:
-            return Rheed(pattern)
+            return Rheed(pattern, config=self.config)
 
 
     def crop(self, sx:int, sy:int, ex:int, ey:int, inplace=False):
@@ -940,34 +939,37 @@ class RheedMask():
             list: a list of spectrum.spectrum.PeakAnalysisDetail
         """
         allpeaks = self._flatten_peaks()
+        if len(allpeaks) == 0:
+            self.collapses_peaks_flatten_ana_res = []
+        
+        else:
+            ci = get_center_peak_idx(allpeaks, self.rd.pattern.shape[1]//2, abs_tolerant)
+            cis = get_center_peak_idxs(allpeaks, self.rd.pattern.shape[1]//2, abs_tolerant)
+            ciw = allpeaks[ci]
 
-        ci = get_center_peak_idx(allpeaks, self.rd.pattern.shape[1]//2, abs_tolerant)
-        cis = get_center_peak_idxs(allpeaks, self.rd.pattern.shape[1]//2, abs_tolerant)
-        ciw = allpeaks[ci]
+            inter_dist = get_peaks_distance(
+                np.arange(len(allpeaks)),
+                np.array(allpeaks),
+                full=True,
+                polar=True
+            )
 
-        inter_dist = get_peaks_distance(
-            np.arange(len(allpeaks)),
-            np.array(allpeaks),
-            full=True,
-            polar=True
-        )
+            self.collapses_peaks_flatten_nbr_dist = inter_dist[ci, :]
+            self.collapses_peaks_flatten_ci = ci
+            self.collapses_peaks_flatten_cis = cis
+            self.collapses_peaks_flatten_ciw = ciw
 
-        self.collapses_peaks_flatten_nbr_dist = inter_dist[ci, :]
-        self.collapses_peaks_flatten_ci = ci
-        self.collapses_peaks_flatten_cis = cis
-        self.collapses_peaks_flatten_ciw = ciw
-
-        self.collapses_peaks_flatten_ana_res = analyze_peaks_distance_cent(
-            self.collapses_peaks_flatten,
-            self.collapses_peaks_flatten_nbr_dist,
-            self.collapses_peaks_flatten_ciw,
-            self.collapses_peaks_flatten_ci,
-            grid_min_w= 0,
-            grid_max_w= self.rd.pattern.shape[1],
-            tolerant= tolerant,
-            abs_tolerant= abs_tolerant,
-            allow_discontinue= allow_discontinue
-        )
+            self.collapses_peaks_flatten_ana_res = analyze_peaks_distance_cent(
+                self.collapses_peaks_flatten,
+                self.collapses_peaks_flatten_nbr_dist,
+                self.collapses_peaks_flatten_ciw,
+                self.collapses_peaks_flatten_ci,
+                grid_min_w= 0,
+                grid_max_w= self.rd.pattern.shape[1],
+                tolerant= tolerant,
+                abs_tolerant= abs_tolerant,
+                allow_discontinue= allow_discontinue
+            )
 
         return self.collapses_peaks_flatten_ana_res
 
@@ -1104,72 +1106,79 @@ class RheedMask():
             Array: group intensity
             Array: relative group intensity
         """
-        # max_width??
+
+        # for the case where no cluster labels is presented for this pattern
+        if self.cluster_labels_unique is None or len(self.cluster_labels_unique) == 0:
+            return [], []
+
         gauss_fit = {}
         group_intensity = np.zeros(len(self.cluster_labels_unique))
 
-        cidxs =self.collapses_peaks_flatten_cis
+        if len(self.collapses_peaks_flatten_ana_res) > 0:
+            cidxs =self.collapses_peaks_flatten_cis
 
-        for i, ul in enumerate(self.cluster_labels_unique):
-            group_mask = np.zeros(self.rd.pattern.shape, dtype=bool)
-            selected = [self.collapses_peaks_flatten_ana_res[i] for i, cl in enumerate(self.cluster_labels) if cl == ul]
-            
-            for j, ana in enumerate(selected):
-                for p in ana.peaks_family:
-                    if p in cidxs: continue 
-                    pid = self.collapses_peaks_flatten_pids[p]
-                    rid = self.collapses_peaks_flatten_regions[p]
-                    region = self.regions[rid]
-                    minr, minc , maxr, maxc = region.bbox
+            for i, ul in enumerate(self.cluster_labels_unique):
+                group_mask = np.zeros(self.rd.pattern.shape, dtype=bool)
+                selected = [self.collapses_peaks_flatten_ana_res[i] for i, cl in enumerate(self.cluster_labels) if cl == ul]
+                
+                for j, ana in enumerate(selected):
+                    for p in ana.peaks_family:
+                        if p in cidxs: continue 
+                        pid = self.collapses_peaks_flatten_pids[p]
+                        rid = self.collapses_peaks_flatten_regions[p]
+                        region = self.regions[rid]
+                        minr, minc , maxr, maxc = region.bbox
 
-                    if len(self.collapses_peaks[rid]) == 1:
-                        # region only has one peak
-                        group_mask[minr:maxr, minc:maxc] = group_mask[minr:maxr, minc:maxc] | region.image
-                    else:
-                        # region has 2 or more peaks
-                        p_neighbor = self.collapses_peaks_flatten_pids[self.collapses_peaks_flatten_regions == rid]
-                        pid = pid - np.min(p_neighbor)
-
-                        if rid not in gauss_fit:
-                            cs = self.collapses[rid]
-                            ps = self.collapses_peaks[rid]
-                            xs = cs.ws[ps]
-                            hs = cs.spec[ps]
-                            width = (max(xs) - min(xs)) / (2*len(ps))
-
-                            guess = []
-                            for k in range(len(xs)):
-                                guess+=[hs[k], xs[k], width]
-                            guess += [0]
-                            try:
-                                popt, pcov = curve_fit(multi_gaussian, cs.ws, cs.spec, guess)
-                                gauss_fit[rid] = (popt, pcov)
-                            except Exception as e:
-                                # raise e
-                                # print(self)
-                                # print(guess)
-                                # print(rid)
-                                # print(ps)
-                                warnings.warn(f"Gaussian Fail at {rid}, split regions equally")
-                                popt, pcov = (guess, None)
-                                gauss_fit[rid] = popt, pcov
+                        if len(self.collapses_peaks[rid]) == 1:
+                            # region only has one peak
+                            group_mask[minr:maxr, minc:maxc] = group_mask[minr:maxr, minc:maxc] | region.image
                         else:
-                            popt, pcov = gauss_fit[rid]
+                            # region has 2 or more peaks
+                            p_neighbor = self.collapses_peaks_flatten_pids[self.collapses_peaks_flatten_regions == rid]
+                            pid = pid - np.min(p_neighbor)
 
-                        # the absolute here is to filp the variance all to positive, some time it would be negative!
-                        old_minc = minc
-                        minc = max(minc, int(popt[pid*3+1]-abs(popt[pid*3+2])))
-                        maxc = min(maxc, int(popt[pid*3+1]+abs(popt[pid*3+2])))
-                        
-                        try:
-                            group_mask[minr:maxr, minc:maxc] = group_mask[minr:maxr, minc:maxc] | region.image[:, minc-old_minc:maxc-old_minc]
-                        except:
-                            warnings.warn(f"Fail to register to the mask {rid}")
-                        
-            group_intensity[i] = np.sum( group_mask * self.rd.pattern )
-            group_percent = group_intensity / np.sum(group_intensity)
+                            if rid not in gauss_fit:
+                                cs = self.collapses[rid]
+                                ps = self.collapses_peaks[rid]
+                                xs = cs.ws[ps]
+                                hs = cs.spec[ps]
+                                width = (max(xs) - min(xs)) / (2*len(ps))
 
-            self.group_intensity = group_intensity
-            self.group_percent = group_percent
+                                guess = []
+                                for k in range(len(xs)):
+                                    guess+=[hs[k], xs[k], width]
+                                guess += [0]
+                                try:
+                                    popt, pcov = curve_fit(multi_gaussian, cs.ws, cs.spec, guess)
+                                    gauss_fit[rid] = (popt, pcov)
+                                except Exception as e:
+                                    # raise e
+                                    # print(self)
+                                    # print(guess)
+                                    # print(rid)
+                                    # print(ps)
+                                    warnings.warn(f"Gaussian Fail at {rid}, split regions equally")
+                                    popt, pcov = (guess, None)
+                                    gauss_fit[rid] = popt, pcov
+                            else:
+                                popt, pcov = gauss_fit[rid]
+
+                            # the absolute here is to filp the variance all to positive, some time it would be negative!
+                            old_minc = minc
+                            minc = max(minc, int(popt[pid*3+1]-abs(popt[pid*3+2])))
+                            maxc = min(maxc, int(popt[pid*3+1]+abs(popt[pid*3+2])))
+                            
+                            try:
+                                group_mask[minr:maxr, minc:maxc] = group_mask[minr:maxr, minc:maxc] | region.image[:, minc-old_minc:maxc-old_minc]
+                            except:
+                                warnings.warn(f"Fail to register to the mask {rid}")
+                            
+                group_intensity[i] = np.sum( group_mask * self.rd.pattern )
+                group_percent = group_intensity / np.sum(group_intensity)
+        else:
+            group_percent = np.zeros(len(self.cluster_labels_unique))
+
+        self.group_intensity = group_intensity
+        self.group_percent = group_percent
 
         return group_intensity, group_percent

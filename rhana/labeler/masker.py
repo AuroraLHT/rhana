@@ -1,8 +1,9 @@
-from fastai.learner import load_learner
 import numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple, Union, Optional
 
+import torch
+from fastai.learner import load_learner
 from rhana.labeler.unet import RHEEDTensorImage, RHEEDTensorMask, rle_encode, rle_decode
 
 _default_learner = Path(__file__).parent.parent.parent / "learner" / "UNet_May6_2021.pkl"
@@ -11,14 +12,22 @@ class UnetMasker:
     """A wrapper class that convert the input to Fastai format and pass it
     to the UNet model. 
     """
-    def __init__(self, learner_path:Union[str, Path], cpu:bool=False):
+    def __init__(self, learner_path:Union[str, Path], cpu:bool=False, device:str=None):
         """Initializer of the UnetMasker
 
         Args:
             learner_path (_type_): the pickle directory that store the FastAI Unet learner
             cpu (bool, optional): use CPU if set to True else use GPU. Defaults to False.
         """
-        self.learn = load_learner(learner_path, cpu=cpu)
+        if device is None: 
+            device = torch.device("cpu")
+        else: 
+            device = torch.device(device)
+
+        self.learn = load_learner(learner_path, cpu=True)
+        self.learn.to(device)
+        self.learn.dls.to(device) # patch dls do not convert to corrent dtype
+        self.device = next(iter(self.learn.model.parameters())).device
 
     def predict(self, rd, do_rle:bool=False, threshold:bool=0.5):
         """Predict masks for both streak and spot features. The original output from the UNet is
@@ -38,6 +47,7 @@ class UnetMasker:
         # shape = rd.pattern.shape
 
         inp = RHEEDTensorImage.create(np.tile(rd.pattern, (3, 1, 1)))
+        inp = inp.to(self.device)
         with self.learn.no_bar():
             outputs = self.learn.predict(inp)
         scores = outputs[2]
