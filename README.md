@@ -1,9 +1,9 @@
 # <span style="text-decoration:underline">Rh</span>eed <span style="text-decoration:underline">Ana</span>lysis
 
 An opensource library dedicated for analysis RHEED patterns and aim to extract information 
-for phase mapping and crystal growth monitoring using machine learning algorithm. doi: (under review).
+for phase mapping and crystal growth monitoring using machine learning algorithm. 
 
-Authors: Haotong Liang, Valentin Stanev, Aaron Gilad Kusne, Yuuto Tsukahra, Kaito Ito, Ryota Takahashi, Mikk Lippmaa, Ichiro Takeuchi
+H. Liang, V. Stanev, A. G. Kusne, Y. Tsukahara, K. Ito, R. Takahashi, M. Lippmaa, and I. Takeuchi, [Application of Machine Learning to Reflection High-Energy Electron Diffraction Images for Automated Structural Phase Mapping](https://doi.org/10.1103/PhysRevMaterials.6.063805), Phys. Rev. Mater. 6, 63805 (2022).
 
 ## Installation
 
