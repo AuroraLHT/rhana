@@ -29,13 +29,44 @@ class UnetMasker:
         self.learn.dls.to(device) # patch dls do not convert to corrent dtype
         self.device = next(iter(self.learn.model.parameters())).device
 
+    def predict_batch(self, rds, threshold:bool=0.5):
+        """Run batch prediction that maximize the usage of gpu. 
+
+        Args:
+        rds (np.array or list of RHEED): multiple input rheed pattern which are scaled to the range of (0, 1)
+        threshold (bool, optional): Output probability above this value the is classicfied as yes in.
+            the binary mask. Range: (0, 1). Defaults to 0.5.
+
+        Returns:
+            dict: a dictionary contains { feature_name : feature_mask }
+
+        """
+        if isinstance(rds, list):
+            inp = np.stack([rd.pattern for rd in rds])
+        elif isinstance(rds, np.array):
+            inp = rds
+        else:
+            inp = np.array(rds)
+            
+        with torch.inference_mode():
+            inp = torch.FloatTensor(inp, device=self.device)
+            scores = torch.nn.functional.sigmoid(self.learn.model(inp))
+            masks = scores > threshold
+
+            # let's test if the model need to resize the output to match the pattern shape or not
+            # shape is not change, no resize is needed.
+        masks = masks.detach().cpu().numpy()
+        classes = self.learn.classes # classes variable store which label is predicted channel-wise
+        return { c: masks[:, i, :, :] for i, c in enumerate(classes) }
+
+
     def predict(self, rd, do_rle:bool=False, threshold:bool=0.5):
         """Predict masks for both streak and spot features. The original output from the UNet is
         2 x H x W tensor with each element contains a probability value of either this pixel contains
         the features or not. Use threshold to adjust your confidence level over the probability output.
 
         Args:
-            rd (rhana.pattern.Rheed): an input rheed pattern this is scaled to the range of (0, 1)
+            rd (rhana.pattern.Rheed): an input rheed pattern which is scaled to the range of (0, 1)
             do_rle (bool, optional): do run line encoding if set to True else return the mask in Array. 
                 Defaults to False.
             threshold (bool, optional): Output probability above this value the is classicfied as yes in.

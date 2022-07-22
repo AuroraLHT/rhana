@@ -1,5 +1,6 @@
 import time
 import pickle
+import yaml
 import signal
 from pathlib import Path
 import threading
@@ -21,6 +22,10 @@ def save_pickle(obj, file):
 def load_pickle(file):
     with Path(file).open("rb") as f:
         return pickle.load(f)
+
+def load_yaml(file):
+    with Path(file).open("r") as f:
+        return yaml.load_all(f)
 
 def gaussian(x, A, x0, sig):
     return A*np.exp(-(x-x0)**2/(2*sig**2))
