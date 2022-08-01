@@ -358,3 +358,20 @@ class RHEEDStreamReader():
         frame_header = self.read_frame_header(frame_index)
         frame = self.read_frame_content(frame_index, frame_header)
         return frame, frame_header
+
+
+    def get_beams(self):
+        beams = {}
+        for i in range(0, self.maxframes):
+            frame_header = self.read_frame_header(i)
+            if frame_header.bpos not in beams:
+                beams[frame_header.bpos] = {
+                    "exposure" : frame_header.exposure,
+                    "frames" : [i],
+                    "gain" : frame_header.gain,
+                    "width" : frame_header.width,
+                    "height" : frame_header.height
+                }
+            else:
+                beams[frame_header.bpos]["frames"].append(i)
+        return beams

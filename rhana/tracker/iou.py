@@ -30,8 +30,11 @@ def overlap_rect(bbox1, bbox2):
         float: Lower Right overlap y
         
     """
-    (x0_1, y0_1, x1_1, y1_1) = bbox1
-    (x0_2, y0_2, x1_2, y1_2) = bbox2
+    try:
+        (x0_1, y0_1, x1_1, y1_1) = bbox1
+        (x0_2, y0_2, x1_2, y1_2) = bbox2
+    except Exception as e:
+        raise ValueError(f"Could not unpack bbox1 and bbox2. bbox1: {bbox1}. bbox2: {bbox2}" )
 
     # get the overlap rectangle
     overlap_x0 = max(x0_1, x0_2)

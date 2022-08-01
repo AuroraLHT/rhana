@@ -25,7 +25,7 @@ def load_pickle(file):
 
 def load_yaml(file):
     with Path(file).open("r") as f:
-        return yaml.load_all(f)
+        return list(yaml.load_all(f, yaml.FullLoader))
 
 def gaussian(x, A, x0, sig):
     return A*np.exp(-(x-x0)**2/(2*sig**2))

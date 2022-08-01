@@ -27,9 +27,15 @@ class UnetMasker:
         self.learn = load_learner(learner_path, cpu=True)
         self.learn.to(device)
         self.learn.dls.to(device) # patch dls do not convert to corrent dtype
+
+        if "Normalize" in str(self.learn.dls.after_batch.fs[0].__class__):
+            self.normalize = self.learn.dls.after_batch.fs[0]
+        else:
+            print("Check learner data transform normalization term")
+
         self.device = next(iter(self.learn.model.parameters())).device
 
-    def predict_batch(self, rds, threshold:bool=0.5):
+    def predict_batch(self, rds, threshold:bool=0.5, return_raw=False):
         """Run batch prediction that maximize the usage of gpu. 
 
         Args:
@@ -38,26 +44,38 @@ class UnetMasker:
             the binary mask. Range: (0, 1). Defaults to 0.5.
 
         Returns:
-            dict: a dictionary contains { feature_name : feature_mask }
-
+            - dict: a dictionary contains { feature_name : feature_mask } if return_raw is False
+            - floattensor: a raw tensor if return_raw is True
         """
         if isinstance(rds, list):
-            inp = np.stack([rd.pattern for rd in rds])
+            if len(rds) > 1:
+                inp = np.stack([rd.pattern for rd in rds], axis=0)
+            else:
+                inp = rds[0].pattern[None, ...]
+            assert len(inp.shape)==3, f"current shape: {inp.shape}"
+
+            inp = np.repeat(inp[:, None, :, :], 3, axis=1)
         elif isinstance(rds, np.array):
             inp = rds
         else:
             inp = np.array(rds)
-            
+        
         with torch.inference_mode():
-            inp = torch.FloatTensor(inp, device=self.device)
-            scores = torch.nn.functional.sigmoid(self.learn.model(inp))
+            inp = torch.from_numpy(inp).to(self.device, torch.float32)
+            inp = (inp - self.normalize.mean) / self.normalize.std
+
+            scores = torch.sigmoid(self.learn.model(inp))
             masks = scores > threshold
 
             # let's test if the model need to resize the output to match the pattern shape or not
             # shape is not change, no resize is needed.
         masks = masks.detach().cpu().numpy()
         classes = self.learn.classes # classes variable store which label is predicted channel-wise
-        return { c: masks[:, i, :, :] for i, c in enumerate(classes) }
+
+        if return_raw:
+            return masks
+        else:
+            return { c: masks[:, i, :, :] for i, c in enumerate(classes) }
 
 
     def predict(self, rd, do_rle:bool=False, threshold:bool=0.5):
@@ -77,19 +95,25 @@ class UnetMasker:
         """
         # shape = rd.pattern.shape
 
-        inp = RHEEDTensorImage.create(np.tile(rd.pattern, (3, 1, 1)))
-        inp = inp.to(self.device)
-        with self.learn.no_bar():
-            outputs = self.learn.predict(inp)
-        scores = outputs[2]
-        masks = scores > threshold
+        inp = np.tile(rd.pattern, (3, 1, 1))[None, ...]
+        # inp = RHEEDTensorImage.create(np.tile(rd.pattern, (3, 1, 1)))
+        # inp = inp.to(self.device)
+        # with self.learn.no_bar():
+        #     outputs = self.learn.predict(inp)
+        # scores = outputs[2]
+        with torch.inference_mode():
+            inp = torch.from_numpy(inp).to(self.device, torch.float32)
+            inp = (inp - self.normalize.mean)/self.normalize.std
+            scores = torch.sigmoid(self.learn.model(inp))
+            masks = scores > threshold
+
+        # masks = scores > threshold
         classes = self.learn.classes # classes variable store which label is predicted channel-wise
 
         # let's test if the model need to resize the output to match the pattern shape or not
         # shape is not change, no resize is needed.
 
         if do_rle:
-            return { c: rle_encode(masks[i, ...]) for i, c in enumerate(classes)}
+            return { c: rle_encode(masks[i, ...]) for i, c in enumerate(classes) }
         else:
-            return { c: masks[i, ...] for i, c in enumerate(classes)}
-
+            return { c: masks[i, ...] for i, c in enumerate(classes) }
