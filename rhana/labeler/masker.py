@@ -106,6 +106,7 @@ class UnetMasker:
             inp = (inp - self.normalize.mean)/self.normalize.std
             scores = torch.sigmoid(self.learn.model(inp))
             masks = scores > threshold
+            masks = masks[0]
 
         # masks = scores > threshold
         classes = self.learn.classes # classes variable store which label is predicted channel-wise
