@@ -8,7 +8,7 @@ import numpy as np
 
 # the path where I put the mask.
 # I uploaded the mask file alongside the with notebok so the path is needed to be adjusted also
-_maskpath = Path(__file__).parent / Path("mask.png")
+_maskpath = Path(__file__).parent / Path("asset/mask.png")
 _pimg = Image.open(_maskpath)
 _APMASK = np.array(_pimg)[:,:, 0] == 255
 
