@@ -20,6 +20,7 @@ from lmfit import models as lm_models
 from rhana.spectrum.model import SpectrumModel
 from rhana.utils import _create_figure, crop, save_pickle, load_pickle
 
+from warnings import warn
 
 def gaussian(x, A, x0, sig):
     return A*np.exp(-(x-x0)**2/(2*sig**2))
@@ -48,6 +49,8 @@ def get_peaks_distance(peaks_idx:List[int], peaks_w:List[float], full=False, pol
     Returns:
         np.array : a len(peaks_w) x len(peaks_w) distance matrix
     """
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
+
     if len(peaks_w.shape) == 1:
         peaks_w = peaks_w[:, None]
     if not full:
@@ -75,6 +78,8 @@ def create_grid(start:float, end:float, center:float, dist:float):
     Returns:
         np.array : a grid 
     """
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
+
     rn = int((end - center) // dist)
     ln = int((start - center) // dist)
     return np.arange(ln+1, rn+1) * dist
@@ -92,7 +97,8 @@ def get_center_peak_idxs(peaks:List[float], spec_center_loc:float, tolerant:floa
     Returns:
         list: center peak indexs
     """
-    
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
+
     return [i for i, p in enumerate(peaks) if abs(p - spec_center_loc) < tolerant]
 
 
@@ -108,7 +114,8 @@ def get_center_peak_idx(peaks:List[float], spec_center_loc:float, tolerant:float
     Returns:
         int: center peak index, return -1 if not found
     """    
-    
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
+   
     ci = np.argmin( abs(peaks - spec_center_loc) )
     if peaks[ci] - spec_center_loc < tolerant : return ci
     else: return -1
@@ -132,6 +139,8 @@ def get_all_nbr_idxs(center_i:int, idxs:List[int]):
     Returns:
         generator : a generator of indexes
     """
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
+
     level = 0
     endleft = False
     endright = False
@@ -188,6 +197,7 @@ def analyze_peaks_distance_cent(
     Returns:
         List[PeakAnalysisDetail]: all the discovered peak family
     """
+    warn('This function would be refactored into the periodicity module', DeprecationWarning, stacklevel=2)
     mask = np.zeros((len(peaks), len(peaks)), dtype=bool)
     out = []
 
@@ -251,7 +261,6 @@ class PeakAnalysisResult:
     avg_dist: float
     avg_err: float
     detail: PeakAnalysisDetail
-
 
 @dataclass
 class Spectrum:
