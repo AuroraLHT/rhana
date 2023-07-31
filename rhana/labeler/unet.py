@@ -84,7 +84,38 @@ def rle_decode(mask_rle:str, shape:Union[Tuple, List]):
     for low, up in zip(starts, ends): img[low:up] = 1
     return img.reshape(shape)
 
+def rle_encode_arr(img):
+    """"Return run-length encoding list from `img`."
 
+    Args:
+        img (Array): the mask array
+
+    Returns:
+        list: rle enecoded mask
+    """
+    
+    pixels = np.concatenate([[0], img.flatten() , [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return runs.tolist()
+
+
+def rle_decode_arr(mask_rle, shape):
+    """Return an image array from run-length encoded list `mask_rle` with `shape`.
+
+    Args:
+        mask_rle (list): the rle encoded mask in list
+        shape (Union[Tuple, List]): the (h, w) of the binary mask
+    Returns:
+        Array: a mask with the shape of (h, w)
+    """    
+    s = mask_rle
+    starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
+    starts -= 1
+    ends = starts + lengths
+    img = np.zeros(shape[0]*shape[1], dtype=np.uint)
+    for low, up in zip(starts, ends): img[low:up] = 1
+    return img.reshape(shape)
 
 def open_rheed(fn, cls=torch.Tensor):
     """Open rheed from a image
