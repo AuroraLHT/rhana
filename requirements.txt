@@ -2,3 +2,4 @@ plotly
 colorlover
 fastai
 lmfit
+scikit-image
