@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional, Union
-from rhana.pattern import RheedConfig, RheedMask
+from rhana.pattern import RheedConfig, RheedMask, RheedInstanceSegmentation
 from rhana.utils import _CM_rgb
 
 from sklearn.cluster import DBSCAN
@@ -80,7 +80,7 @@ class RHEEDMaskDistancePhaser:
     present of each phase and their relative intensity ratio.
     
     """
-    def __init__(self, rdms:List[RheedMask], convert_dist=False):
+    def __init__(self, rdms:List[Union['RheedMask', 'RheedInstanceSegmentation']], convert_dist=False):
         """
         Args:
             rdms (List[RheedMask]): a list RheedMask that has ran through periodicity analysis already
@@ -93,7 +93,7 @@ class RHEEDMaskDistancePhaser:
         self.all_peak_dists = []
 
         for i, rdm in enumerate(self.rdms):
-            for j, res in enumerate(rdm.collapses_peaks_flatten_ana_res):
+            for j, res in enumerate(rdm.collapses_peaks_pgs):
                 # the single item of all_peak_dists is a tuple like 
                 # ((index_of_rdm in rdms, index of ana inana_res), average distance of that ana)
                 peak_dist = res.avg_dist if not self.convert_dist else rdm.rd.config.hdist2G(res.avg_dist)
