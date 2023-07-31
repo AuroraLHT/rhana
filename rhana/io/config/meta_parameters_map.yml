@@ -1,0 +1,68 @@
+---
+Main Chamber:
+  Ion: 
+    name: pg01
+    unit: Torr
+  Convec: 
+    name: pg02
+    unit: Torr
+  Crystal:
+    name: pg04
+    unit: Torr
+  Rotary:
+    name: pg03
+    unit: Torr
+
+Loading Chamber:
+  Ion: 
+    name: pg11
+    unit: Torr
+  Rotary:
+    name: pg12
+    unit: Torr
+
+Heating:
+  Temperature:
+    name: tm01
+    unit: °C
+  Set Point:
+    name: tm02
+    unit: °C
+  Target:
+    name: tr01
+    unit: °C
+  Ramp:
+    name: tr02
+    unit: °C
+  Laser Current:
+    name: hp01
+    unit: A
+  Laser Power: 
+    name: hp02
+    unit: W
+
+Deposition:
+  Fired:
+    name: pc01
+    unit: Count
+  Requested:
+    name: pc02
+    unit: Count
+  Rate:
+    name: pc03
+    unit: Count
+  Total:
+    name: pc04
+    unit: Count
+
+Mechanical:
+  Rotation:
+    name: mp01
+    unit: °
+  Upper Mask:
+    name: mp02
+    unit: mm
+  Lower Mask:
+    name: mp03
+    unit: mm
+...

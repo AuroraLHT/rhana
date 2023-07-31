@@ -1,10 +1,26 @@
 import struct
 import numpy as np
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from collections import defaultdict
+import re
+from typing import IO as IO_Type, Optional, Union, Dict, List
+import yaml
 
+with (Path(__file__).parent/"config/meta_parameters_map.yml").open() as f:
+    META_PARAMS_MAP = yaml.load(f, yaml.FullLoader)
+
+META_PARAMS_MAP_REV = {}
+for main_k, main_v in META_PARAMS_MAP.items():
+    for sub_k, sub_v in main_v.items():
+        META_PARAMS_MAP_REV[sub_v['name']] = f"{main_k}-{sub_k} ({sub_v['unit']})"
 
 def read_binary(buffer, decode_format, num_bundle=1, return_first=True):
+    """
+    see https://docs.python.org/3/library/struct.html#format-characters for possible decode_format
+    """
+
+
     size = struct.calcsize(decode_format) * num_bundle
     binary = buffer.read(size)
     if num_bundle == 1:
@@ -49,7 +65,102 @@ class RHEEDFrameHeader:
     gain : int
     bpos : int
     bframe : int
-    
+    gunh : Optional[int] = None
+    tilth : Optional[int] = None
+    gunv : Optional[int] = None
+    tiltv : Optional[int] = None
+    offgunh : Optional[int] = None
+    offtilth : Optional[int] = None
+    offgunv : Optional[int] = None
+    offtiltv : Optional[int] = None
+    focus : Optional[int] = None
+    meta : Optional[Dict] = field(default_factory=dict)
+
+    @classmethod
+    def from_streamreader_V5(cls, dir_fo:IO_Type, streamreader:"RHEEDStreamReader", frame_index:int):
+        read_fo = dir_fo
+
+        read_fo.seek(16 + streamreader.dblock_sz + frame_index * streamreader.frame_block_sz, 0)    
+
+        frameoff = read_binary(read_fo, "L", return_first = True)
+        tstamp = read_binary(read_fo, "L", return_first = True)
+        rstamp = read_binary(read_fo, "L", return_first = True)
+
+        read_binary(read_fo, "I", return_first = True)
+
+        frameindex = read_binary(read_fo, "I", return_first = True)
+        rframeindex = read_binary(read_fo, "I", return_first = True)
+
+        ccdwidth = read_binary(read_fo, "I", return_first = True)
+        ccdheight = read_binary(read_fo, "I", return_first = True)
+
+        width = read_binary(read_fo, "I", return_first = True)
+        height = read_binary(read_fo, "I", return_first = True)
+
+        offx = read_binary(read_fo, "I", return_first = True)
+        offy = read_binary(read_fo, "I", return_first = True)
+
+        nbits = read_binary(read_fo, "I", return_first = True)
+        binning = read_binary(read_fo, "I", return_first = True)
+
+        decimation = read_binary(read_fo, "I", return_first = True)
+        exposure = read_binary(read_fo, "I", return_first = True)
+        gain = read_binary(read_fo, "I", return_first = True)
+        bpos = read_binary(read_fo, "I", return_first = True)
+        bframe = read_binary(read_fo, "I", return_first = True)
+
+        gunh = read_binary(read_fo, "i", return_first = True)
+        tilth = read_binary(read_fo, "i", return_first = True)
+        gunv = read_binary(read_fo, "i", return_first = True)
+        tiltv = read_binary(read_fo, "i", return_first = True)
+        offgunh = read_binary(read_fo, "i", return_first = True)
+        offtilth = read_binary(read_fo, "i", return_first = True)
+        offgunv = read_binary(read_fo, "i", return_first = True)
+        offtiltv = read_binary(read_fo, "i", return_first = True)
+        focus = read_binary(read_fo, "i", return_first = True)
+
+        
+        header = cls(
+            frameoff = frameoff,
+            tstamp = tstamp,
+            rstamp = rstamp,
+            frameindex = frameindex,
+            rframeindex = rframeindex,
+            ccdwidth = ccdwidth,
+            ccdheight = ccdheight,
+            width = width,
+            height = height,
+            offx = offx,
+            offy = offy,
+            nbits = nbits,
+            binning = binning,
+            decimation = decimation,
+            exposure = exposure,
+            gain = gain,
+            bpos = bpos,
+            bframe = bframe,
+
+            gunh = gunh,
+            tilth = tilth,
+            gunv = gunv,
+            tiltv = tiltv,
+            offgunh = offgunh,
+            offtilth = offtilth,
+            offgunv = offgunv,
+            offtiltv = offtiltv,
+            focus = focus
+        )
+        
+        # dynamically created chamber variables
+        for param_name in streamreader.param_names:
+            param_value = read_binary(read_fo, "f", return_first = True)
+            # setattr(header, param_name, param_value)
+            if param_name in META_PARAMS_MAP_REV:
+                param_name = META_PARAMS_MAP_REV[param_name]
+            header.meta[param_name] = param_value
+
+        return header
+
     @classmethod
     def from_streamreader_V4(cls, dir_fo, streamreader, frame_index):
         read_fo = dir_fo
@@ -261,21 +372,51 @@ class RHEEDStreamReader():
         
         self.directory_filename = Path(directory_filename)
         self.rheed_stream_filename = Path(rheed_stream_filename)
-        self.name = directory_filename.stem
+        self.name = self.directory_filename.stem
         
         self.directory_size = self.directory_filename.stat().st_size
         self.open()
         self.read_header()
-            
+    
+    @classmethod
+    def from_library(cls, name, number, folder):
+        folder = Path(folder)
+        dir_path = folder / f"{name}-RHEED-{number}.dir"
+        bin_path = folder / f"{name}-RHEED-{number}.bin"
+        assert dir_path.exists(), f"{dir_path} do not exists"
+        assert bin_path.exists(), f"{bin_path} do not exists"
+        return cls(dir_path, bin_path)
+
+    @staticmethod
+    def summarize_folder(folder):
+        summary = defaultdict(lambda: [])
+        rheed_files = folder.glob("*.dir")
+        for dir_file in rheed_files:
+            bin_file = dir_file.parent / (dir_file.stem + ".bin")
+            if bin_file.exists():
+                library_name = dir_file.stem
+                res = re.findall("(\w+\d+)-RHEED-(\d+)", library_name)
+                if res:
+                    project_name, num = res[0]
+                    summary[project_name].append(num)
+        
+        for k in summary.keys():
+            summary[k] = sorted(summary[k])
+
+        return summary 
+
+    def _raise_version_error(self):
+        raise ValueError(f"Version {self.version} is not supported")        
+
     def open(self):
         self.directory_fo = open(self.directory_filename, "rb")
         self.rheed_stream_fo = open(self.rheed_stream_filename, "rb")
-        self.close = False
+        self.is_close = False
         
-    def close():
+    def close(self,):
         self.directory_fo.close()
         self.rheed_stream_fo.close()
-        self.close = True
+        self.is_close = True
                         
     def read_header(self):
         read_fo = self.directory_fo
@@ -296,7 +437,16 @@ class RHEEDStreamReader():
             decode_format="I"
         )
         
-        
+        def _read_fblock_v5():                
+            self.dblock_sz = read_binary(read_fo, "I")
+            self.maxframes = (self.directory_size - 16 - self.dblock_sz) // self.frame_block_sz
+
+            _ = read_binary(read_fo, "I")
+            npars = read_binary(read_fo, "I")
+
+            param_names = read_binary(read_fo, f"{self._params_name_length * npars:d}s",  return_first=True).decode()
+            self.param_names = [ param_names[i*self._params_name_length:i*self._params_name_length+self._params_name_length] for i in range(npars) ]
+            self.param_def = read_block(read_fo, "I", "s", lambda x:x.decode())
         
         def _read_fblock_v4():        
             self.dblock_sz = read_binary(read_fo, "I")
@@ -320,8 +470,11 @@ class RHEEDStreamReader():
 
         def _read_fblock_v1():
             self.maxframes = (self.directory_size - 16) // self.frame_block_sz
-                        
-        if self.version == 4:
+
+        if self.version == 5:
+            # v5 and v4 is same
+            _read_fblock_v5()                        
+        elif self.version == 4:
             _read_fblock_v4()
         elif self.version == 3:
             _read_fblock_v3()
@@ -330,21 +483,26 @@ class RHEEDStreamReader():
         elif self.version == 1:
             _read_fblock_v1()
         else:
-            print(f"Version {self.version} is not supported.")
+            self._raise_version_error()
+            # print(f"Version {self.version} is not supported.")
             
         return self
     
     
     def read_frame_header(self, frame_index):
-        if self.version == 4:
+        if self.version == 5:
+            return RHEEDFrameHeader.from_streamreader_V5(self.directory_fo, self, frame_index)
+        elif self.version == 4:
             return RHEEDFrameHeader.from_streamreader_V4(self.directory_fo, self, frame_index)
         elif self.version == 3:
-            return RHEEDFrameHeaderV3.from_streamreader_V3(self.directory_fo, self, frame_index)
+            return RHEEDFrameHeader.from_streamreader_V3(self.directory_fo, self, frame_index)
         elif self.version == 2:
-            return RHEEDFrameHeaderV2.from_streamreader_V2(self.directory_fo, self, frame_index)
+            return RHEEDFrameHeader.from_streamreader_V2(self.directory_fo, self, frame_index)
         elif self.version == 1:
-            return RHEEDFrameHeaderV1.from_streamreader_V1(self.directory_fo, self, frame_index)
-
+            return RHEEDFrameHeader.from_streamreader_V1(self.directory_fo, self, frame_index)
+        else:
+            self._raise_version_error()
+            # raise ValueError(f"Version {self.version} is not supported")
         
     def read_frame_content(self, frame_index, frame_header):
         read_fo = self.rheed_stream_fo
@@ -364,6 +522,8 @@ class RHEEDStreamReader():
         beams = {}
         for i in range(0, self.maxframes):
             frame_header = self.read_frame_header(i)
+            # if frame_header is None: continue
+
             if frame_header.bpos not in beams:
                 beams[frame_header.bpos] = {
                     "exposure" : frame_header.exposure,
