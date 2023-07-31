@@ -12,8 +12,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 _CM_rgb = cl.scales['10']['qual']['Paired']
-_CM = cl.to_numeric( cl.scales['10']['qual']['Paired'] )
-_CM = list( map(lambda x: "#{:02x}{:02x}{:02x}".format(*tuple(map(int, x)) ), _CM ) ) # transfer "rgb(0,0,0)" into #FFFFFF format
+_CM_np = cl.to_numeric( _CM_rgb )
+ # transfer "rgb(0,0,0)" into #FFFFFF forma
+_CM = list( map(lambda x: "#{:02x}{:02x}{:02x}".format(*tuple(map(int, x)) ), _CM_np ) )
+
+def to_img(arr):
+    return (arr / arr.max() * 255).astype(np.uint8)
 
 def save_pickle(obj, file):
     with Path(file).open("wb") as f:
@@ -43,7 +47,7 @@ def show_circle(ax, xy, radius, color="black", **kargs):
         plot a circle on the matplotlib axes
     """
     
-    cir = mpatches.Circle(xy, radius=radius, fill=False, color=color, **kargs)
+    cir = mpatches.Circle(xy[::-1], radius=radius, fill=False, color=color, **kargs)
     ax.add_patch(cir)
     return ax
 
