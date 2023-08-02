@@ -6,6 +6,7 @@ from collections import defaultdict
 import re
 from typing import IO as IO_Type, Optional, Union, Dict, List
 import yaml
+import io
 
 with (Path(__file__).parent/"config/meta_parameters_map.yml").open() as f:
     META_PARAMS_MAP = yaml.load(f, yaml.FullLoader)
@@ -44,7 +45,26 @@ def read_block(buffer, blocksz_fmt, content_fmt, callback=None):
         return callback(content)
     else:
         content        
-        
+
+def summarize_files(rheed_files):
+    rheed_files = [ Path(file) for file in rheed_files ]
+    rheed_files = [ file for file in rheed_files if file.suffix == ".dir" ]
+    summary = defaultdict(lambda : [])
+    for dir_file in rheed_files:
+        bin_file = dir_file.parent / (dir_file.stem + 'bin')
+            
+        library_name = dir_file.stem
+        res = re.findall("(\w+\d+)-RHEED-(\d+)", library_name)
+        if res:
+            project_name, num = res[0]
+            summary[project_name].append(num)
+    
+    for k in summary.keys():
+        summary[k] = sorted(summary[k])
+
+    return summary 
+
+
 @dataclass
 class RHEEDFrameHeader:
     frameoff : int
@@ -362,60 +382,35 @@ class RHEEDFrameHeader:
         )
                 
         return header    
-    
-class RHEEDStreamReader():
+
+class BaseRHEEDStreamReader:
     _params_name_length = 4
     _main_file_header_size = 16
     _frame_storage_fmt = "H"
         
-    def __init__(self, directory_filename, rheed_stream_filename):
+    def __init__(self, directory_fo, stream_fo, directory_size, is_close=False):
         
-        self.directory_filename = Path(directory_filename)
-        self.rheed_stream_filename = Path(rheed_stream_filename)
-        self.name = self.directory_filename.stem
+        # self.directory_filename = Path(directory_filename)
+        # self.stream_filename = Path(stream_filename)
+        # self.name = self.directory_filename.stem
         
-        self.directory_size = self.directory_filename.stat().st_size
-        self.open()
+        # self.directory_size = self.directory_filename.stat().st_size
+        # self.open()
+        # self.read_header()
+
+        self.directory_fo = directory_fo
+        self.stream_fo = stream_fo
+        self.directory_size = directory_size
+        self.is_close = is_close
+
         self.read_header()
     
-    @classmethod
-    def from_library(cls, name, number, folder):
-        folder = Path(folder)
-        dir_path = folder / f"{name}-RHEED-{number}.dir"
-        bin_path = folder / f"{name}-RHEED-{number}.bin"
-        assert dir_path.exists(), f"{dir_path} do not exists"
-        assert bin_path.exists(), f"{bin_path} do not exists"
-        return cls(dir_path, bin_path)
-
-    @staticmethod
-    def summarize_folder(folder):
-        summary = defaultdict(lambda: [])
-        rheed_files = folder.glob("*.dir")
-        for dir_file in rheed_files:
-            bin_file = dir_file.parent / (dir_file.stem + ".bin")
-            if bin_file.exists():
-                library_name = dir_file.stem
-                res = re.findall("(\w+\d+)-RHEED-(\d+)", library_name)
-                if res:
-                    project_name, num = res[0]
-                    summary[project_name].append(num)
-        
-        for k in summary.keys():
-            summary[k] = sorted(summary[k])
-
-        return summary 
-
     def _raise_version_error(self):
         raise ValueError(f"Version {self.version} is not supported")        
-
-    def open(self):
-        self.directory_fo = open(self.directory_filename, "rb")
-        self.rheed_stream_fo = open(self.rheed_stream_filename, "rb")
-        self.is_close = False
         
     def close(self,):
         self.directory_fo.close()
-        self.rheed_stream_fo.close()
+        self.stream_fo.close()
         self.is_close = True
                         
     def read_header(self):
@@ -505,7 +500,7 @@ class RHEEDStreamReader():
             # raise ValueError(f"Version {self.version} is not supported")
         
     def read_frame_content(self, frame_index, frame_header):
-        read_fo = self.rheed_stream_fo
+        read_fo = self.stream_fo
         read_fo.seek(frame_header.frameoff)
         image_bin = read_fo.read(struct.calcsize(self._frame_storage_fmt)*frame_header.width*frame_header.height)
         image = np.frombuffer(image_bin, dtype=self._frame_storage_fmt, offset=0).reshape(frame_header.height, frame_header.width)
@@ -535,3 +530,130 @@ class RHEEDStreamReader():
             else:
                 beams[frame_header.bpos]["frames"].append(i)
         return beams
+
+class RHEEDStreamReader(BaseRHEEDStreamReader):
+        
+    def __init__(self, directory_filename, stream_filename):
+        
+        self.directory_filename = Path(directory_filename)
+        self.stream_filename = Path(stream_filename)
+        self.name = self.directory_filename.stem        
+        directory_size = self.directory_filename.stat().st_size
+        directory_fo, stream_fo, is_close = self.open(self.directory_filename, self.stream_filename)
+        
+        super().__init__(
+            directory_fo=directory_fo,
+            stream_fo=stream_fo,
+            directory_size=directory_size,
+            is_close=is_close
+        )
+
+    @classmethod
+    def from_library(cls, name, number, folder):
+        folder = Path(folder)
+        dir_path = folder / f"{name}-RHEED-{number}.dir"
+        bin_path = folder / f"{name}-RHEED-{number}.bin"
+        assert dir_path.exists(), f"{dir_path} do not exists"
+        assert bin_path.exists(), f"{bin_path} do not exists"
+        return cls(dir_path, bin_path)
+
+    @staticmethod
+    def summarize_folder(folder):
+        # summary = defaultdict(lambda: [])
+        folder = Path(folder)
+        rheed_files = folder.glob("*.dir")
+        return summarize_files(rheed_files)
+        # for dir_file in rheed_files:
+        #     bin_file = dir_file.parent / (dir_file.stem + ".bin")
+        #     if bin_file.exists():
+        #         library_name = dir_file.stem
+        #         res = re.findall("(\w+\d+)-RHEED-(\d+)", library_name)
+        #         if res:
+        #             project_name, num = res[0]
+        #             summary[project_name].append(num)
+        
+        # for k in summary.keys():
+        #     summary[k] = sorted(summary[k])
+
+        # return summary 
+
+    def _raise_version_error(self):
+        raise ValueError(f"Version {self.version} is not supported")        
+
+    def reconnect(self):
+        directory_fo, stream_fo, is_close = self.open(self.directory_filename, self.stream_filename)
+        self.directory_fo = directory_fo
+        self.stream_fo = stream_fo
+        self.is_close = is_close
+
+    def open(self, directory_filename, stream_filename):
+        directory_fo = open(directory_filename, "rb")
+        stream_fo = open(stream_filename, "rb")
+        is_close = False
+
+        return directory_fo, stream_fo, is_close
+                                
+class SFTPRHEEDStreamReader(BaseRHEEDStreamReader):
+    def __init__(self, directory_filename, stream_filename, sftp_client):
+        
+        self.directory_filename = Path(directory_filename)
+        self.stream_filename = Path(stream_filename)
+        self.name = self.directory_filename.stem
+
+        self.sftp_client = sftp_client
+        directory_size = sftp_client.lstat(stream_filename).st_size
+
+        directory_fo, stream_fo, is_close = self.open(self.directory_filename, self.stream_filename)
+        
+        super().__init__(
+            directory_fo=directory_fo,
+            stream_fo=stream_fo,
+            directory_size=directory_size,
+            is_close=is_close
+        )
+
+    @classmethod
+    def from_library(cls, name, number, folder, sftp_client):
+        folder = Path(folder)
+        dir_path = folder / f"{name}-RHEED-{number}.dir"
+        bin_path = folder / f"{name}-RHEED-{number}.bin"
+        assert dir_path.exists(), f"{dir_path} do not exists"
+        assert bin_path.exists(), f"{bin_path} do not exists"
+        return cls(dir_path, bin_path, sftp_client)
+
+    @staticmethod
+    def summarize_folder(folder):
+        # summary = defaultdict(lambda: [])
+        folder = Path(folder)
+        rheed_files = folder.glob("*.dir")
+        return summarize_files(rheed_files)
+        # for dir_file in rheed_files:
+        #     bin_file = dir_file.parent / (dir_file.stem + ".bin")
+        #     if bin_file.exists():
+        #         library_name = dir_file.stem
+        #         res = re.findall("(\w+\d+)-RHEED-(\d+)", library_name)
+        #         if res:
+        #             project_name, num = res[0]
+        #             summary[project_name].append(num)
+        
+        # for k in summary.keys():
+        #     summary[k] = sorted(su
+        # .mmary[k])
+
+        # return summary 
+
+    def _raise_version_error(self):
+        raise ValueError(f"Version {self.version} is not supported")        
+
+    def reconnect(self):
+        directory_fo, stream_fo, is_close = self.open(self.directory_filename, self.stream_filename)
+        self.directory_fo = directory_fo
+        self.stream_fo = stream_fo
+        self.is_close = is_close
+
+    def open(self, directory_filename, stream_filename):
+        directory_fo = self.sftp_client.open(str(directory_filename), mode="rb")
+        stream_fo = self.sftp_client.open(str(stream_filename), mode="rb")
+        is_close = False
+
+        return directory_fo, stream_fo, is_close
