@@ -71,7 +71,10 @@ class PeriodicityAnalyzer:
         return allowed, select_idx, gidx, selected_multi, match_error[select_mask]
 
     def _get_group(self, arr, center_nbr_dists, select_idx, selected_multi):
-
+        # print(arr)
+        # if 22 in select_idx: 
+        #     print(arr)
+        #     print(select_idx)
         nonzero_multi = selected_multi != 0
         avg_dist = np.sum( 
             center_nbr_dists[select_idx][nonzero_multi] / selected_multi[nonzero_multi] ) / (sum(nonzero_multi)
@@ -82,8 +85,8 @@ class PeriodicityAnalyzer:
             family_idx=select_idx,
             family_elements=arr[select_idx],
             family_multis=selected_multi,
-            avg_dist=avg_dist, 
-            avg_err=avg_err, 
+            avg_dist=avg_dist,
+            avg_err=avg_err,
             # detail=None
         )
 
@@ -306,6 +309,20 @@ class PeriodicityAnalyzer:
             
         return out
 
+    def is_sub_family(self, group1, group2):
+        """
+            check if group 1 or 2 average distance is some integer of
+            gourp 2 or 1. Very important when checking the epitaxial 
+            phase. Some growth actually make 1/n streaks between the 
+            original substrate streak.
+        """
+        base = min(group1.avg_dist, group2.avg_dist)
+        multi = max(group1.avg_dist, group2.avg_dist)
+
+        abs_diff = np.abs( np.round( multi / base ) * base - multi )
+        diff = abs_diff / base
+
+        return diff <= self.tolerant and abs_diff <= self.abs_tolerant
 
         #     nbr_grid_dm = abs(distance_matrix(center_nbr_dists[:, None], grid[:, None])) # this step could be optimize to O(n)
         #     close = nbr_grid_dm.argmin(axis=1) # a array of peak id that has the shortest distance to one of the tick in the grid 
