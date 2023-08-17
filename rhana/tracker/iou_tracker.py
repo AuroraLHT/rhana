@@ -194,7 +194,13 @@ class IOUTracker:
         for track in self._tracks_active:
             if len(detections) > 0:
                 # get det with highest iou and also has the same class label
-                best_match = max(detections, key=lambda x: iou_bbox(track.det_bboxes[-1], x['bbox']) if x['label'] == track.det_label else 0)
+
+                match_result = list(map(lambda x: iou_bbox(track.det_bboxes[-1], x['bbox']) if x['label'] == track.det_label else 0, detections))
+                best_match_i = np.argmax(match_result)
+                best_match = detections[best_match_i]
+
+                # replace this line
+                # best_match = max(detections, key=lambda x: iou_bbox(track.det_bboxes[-1], x['bbox']) if x['label'] == track.det_label else 0)
 
                 if iou_bbox(track.det_bboxes[-1], best_match['bbox']) >= self.sigma_iou:
                     # track.det_bboxes.append(best_match['bbox'])
@@ -209,7 +215,8 @@ class IOUTracker:
                     det2track[best_match['id']] = track.id
                     
                     # remove from best matching detection from detections
-                    del detections[detections.index(best_match)]
+                    # del detections[detections.index(best_match)]
+                    detections.pop(best_match_i)
                     
 
             # if track was not updated
