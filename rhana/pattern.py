@@ -622,12 +622,14 @@ class Rheed:
             matplotlib.pyplot.Axes: plot's figure
         """    
     
-        if hasattr(self, "xy") and hasattr(self, "r"):
-            fig, ax = self.plot_nlaue(self.xy, [self.r], ax=ax, **fig_kargs)
+        if hasattr(self, "laue_xy") and hasattr(self, "laue_r"):
+            fig, ax = self.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, **fig_kargs)
         if plot_aux:
-            ax.vlines([self.xy[1], self.xy[1] - self.r, self.xy[1] + self.r], 0, self.pattern.shape[0]-1)
+            ax.vlines([self.laue_xy[1], self.laue_xy[1] - self.laue_r, self.laue_xy[1] + self.laue_r], 0, self.pattern.shape[0]-1)
             # plt.vlines(, 0, rd_.pattern.shape[0]-1)
-            ax.scatter(self.xy[1], self.xy[0])
+            ax.scatter(self.laue_xy[1], self.laue_xy[0])
+        
+        return fig, ax
         
     def plot_nlaue(self, xy, rs, ax=None, **fig_kargs):
         """Plot multiple laue circles. 
@@ -1714,29 +1716,116 @@ class RheedInstanceSegmentation:
 
         if method=="top":
             xy, r_i = _get_top()
-            return xy, r_i, None
         elif method=="top+tracker":
             xy, r_i = _get_top()
             track = tracker.det2track[r_i]
-            return xy, r_i, track
         elif method=="tracker":
             r_i = tracker.track2det[track]
             xy = self._get_region_centroid(self.regions[r_i])
-            return xy, r_i, track
         else:
             raise Exception(f"method of {method} is unknown, allow top, top+trackes, and tracker")
 
-        # csh = self.get_region_collapse(topr, "h")
-        # csv = self.get_region_collapse(topr, "v")
+        self.db_i = r_i
+        self.db = xy
 
-        # xy = []
-        # for d, cs in {"horizontal":csh, "vertical":csv}.items():
-        #     cs.remove_background()
-        #     cs.smooth(sigma=sigma)
-        #     peaks, _ = cs.fit_spectrum_peaks(height=height, threshold=threshold, prominence=prominence, **peak_args)
-        #     peaks_w = cs.ws[peaks]
-        #     assert len(peaks_w) == 1, f"found {len(peaks)} peaks in {d} direction"
-        #     xy.append(peaks_w[0])
+        return xy, r_i, track
+
+
+    def get_candidate_specular_spot(self, area_min=3):
+        """
+        Find all the possible blob that contain specular spot information. Return [] if no specular spot
+        spot is found. 
+
+        Args:
+            rmin (float): minimum radius for a spot to be selected
+        
+        Returns:
+            List of blob
+        """
+        
+        db_inst = self.inst_segs[self.db_i]
+        dby_s, dbx_s, dby_e, dbx_e = db_inst.bbox # the coordination is flipped
+        # print(db_inst.bbox)
+
+        i = -1
+        candidates = []
+        condidates_id = []
+        for i, (inst, region) in enumerate(zip(self.inst_segs, self.regions)):
+            if inst.label_name == "spot":
+                x, y = self._get_region_centroid(region)
+                area = inst.mask.sum()
+                # print(x, y)
+
+                if (area>=area_min and y<=dby_e and y>=dby_s):
+                    ss = (x,y)
+                    candidates.append(ss)
+                    condidates_id.append(i)
+
+        return candidates, condidates_id
+
+
+    def laue_circle_analyse(self, area_min=3):
+        """
+            use db to guess where the specular spot and the 0-order laue circle is
+        """
+
+        if hasattr(self, "db") and self.db is not None:
+            db_x, db_y = self.db
+
+            candidates, candidates_id = self.get_candidate_specular_spot(area_min=area_min)            
+            selected_id = candidates_id + [self.db_i]
+
+            other_xy =  np.stack([ self._get_region_centroid(r) for i, r in enumerate( self.regions ) if i not in selected_id ], axis=0)
+
+            best_dist = np.inf
+            best_xy, best_r = None, None
+            best_ss, best_ss_i = None, None
+
+            for ss, ss_i in zip(candidates, candidates_id):
+                ss_x, ss_y = ss
+                dbc = np.array([db_x, db_y])
+                ssc = np.array([ss_x, ss_y])
+                xy = np.stack( [dbc, ssc], axis=0 ).mean(axis=0)
+                r = np.mean( (np.linalg.norm(xy-dbc), np.linalg.norm(xy-ssc)) )
+                
+                dist = np.mean( [ np.abs(r-np.linalg.norm(xy-o_xy)) for o_xy in other_xy] )
+
+                if best_dist > dist:
+                    best_xy = xy
+                    best_r = r
+                    best_ss = ss
+                    best_ss_i = ss_i
+                    best_dist = dist
+
+            self.laue_xy = best_xy
+            self.ss = best_ss
+            self.laue_r = best_r
+            
+            # return xy location and radius
+            return self.laue_xy, self.laue_r
+        else:
+            raise Exception("either direct beam or specular beam is not detected")
+
+
+    def plot_0laue(self, ax=None, plot_aux=False, **fig_kargs):
+        """Plot the 0 order laue circle
+        
+        Args:
+            ax (matplotlib.pyplot.Axes): figure's axes. Defaults to None
+                
+        Returns:
+            matplotlib.pyplot.Figure: plot's figure
+            matplotlib.pyplot.Axes: plot's figure
+        """    
+    
+        if hasattr(self, "laue_xy") and hasattr(self, "laue_r"):
+            fig, ax = self.rd.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, **fig_kargs)
+        if plot_aux:
+            ax.vlines([self.laue_xy[1], self.laue_xy[1] - self.laue_r, self.laue_xy[1] + self.laue_r], 0, self.rd.pattern.shape[0]-1)
+            # plt.vlines(, 0, rd_.pattern.shape[0]-1)
+            ax.scatter(self.laue_xy[1], self.laue_xy[0])
+
+        return fig, ax
 
 
     def _flatten_peaks(self):
@@ -1957,11 +2046,13 @@ class RheedInstanceSegmentation:
                 x= self.collapses_peaks_ws_flatten[res.family_idx],
                 ymin=0.05*self.rd.pattern.shape[0], ymax=0.95*self.rd.pattern.shape[0],
                 alpha=0.5, 
-                color=plt.cm.Set1.colors[i]
+                color=plt.cm.Set1.colors[i%len(plt.cm.Set1.colors)]
             )
             if show_text:
+                h, w = self.rd.pattern.shape
+                offset = int(h * 0.05)
                 for p in self.collapses_peaks_ws_flatten[res.family_idx]:
-                    ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
+                    ax.text(x=p, y=offset*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
         
         return fig, ax
 
