@@ -20,39 +20,62 @@ def plot_metas(metas):
         # axs[i].legend(loc="upper left")
     plt.show()
 
-def get_deposition_window(metas):
+
+def get_deposition_window(metas, verbose):
     dep_total = metas['Deposition-Total (Count)'].values
     dep_fire = metas['Deposition-Fired (Count)'].values
     dep_rate = metas['Deposition-Rate (Count)'].values
     dep_req = metas['Deposition-Requested (Count)'].values
 
-    total_start = dep_total[-1] - dep_req[-1]
-    total_end = dep_total[-1]
+    total_zero_mask = dep_total == 0
+    
+    total_end = dep_total[dep_total > 0][-1]
+    total_start = total_end - dep_req[-1]
+    
+    fire_start = max(dep_fire[-1] - dep_req[-1], dep_fire.min())
+    fire_end = dep_fire[-1]
 
-    fire_start = dep_fire[-1] - dep_req[-1] + 1
-
-    total_starts = np.where(total_start==dep_total)[0]
-    fire_starts = np.where(fire_start==dep_fire)[0]
+    if verbose:
+        print("dep total start, end:", total_start, total_end)
+        print("dep fire start, end:", fire_start, fire_end)
+    
+    total_starts = np.where( (total_start<dep_total) & ~total_zero_mask )[0]
+    fire_starts = np.where(fire_start<dep_fire)[0]
 
     if len(total_starts):
-        total_start_pos = total_starts[-1]
+        total_start_pos = total_starts[dep_total[total_starts].argmin()] - 1
+        total_start_pos = max(0, total_start_pos)
     else:
         total_start_pos = -1
 
     if len(fire_starts):
-        fire_start_pos = fire_starts[-1]
+        fire_start_pos = fire_starts[dep_fire[fire_starts].argmin()] - 1
+        fire_start_pos = max(0, total_start_pos)
+        
     else:
         fire_start_pos = -1
-
-    if total_start_pos != -1 and fire_start_pos != -1 and total_start_pos < fire_start_pos:
-        start_pos = total_start_pos
+    if total_start_pos != -1 and fire_start_pos != -1:
+        start_pos = int( min(total_start_pos, fire_start_pos) )
     else:
         start_pos = None
 
     total_ends = np.where(total_end==dep_total)[0]
+    total_ends = total_ends[total_ends>start_pos]
+
+    fire_ends = np.where( fire_end==dep_fire )[0]
+    fire_ends = fire_ends[fire_ends>start_pos]
+    
     if len(total_ends):
-        end_pos = total_ends[0]
+        total_end_pos = int(total_ends[0])
     else:
-        end_pos = None
+        total_end_pos = -1
+    
+    if len(fire_ends):
+        fire_end_pos = int(fire_ends[0])
+    else:
+        fire_end_pos = -1
+
+    end_pos = max(fire_end_pos, total_end_pos)
+    end_pos = None if end_pos == -1 else end_pos
 
     return start_pos, end_pos
