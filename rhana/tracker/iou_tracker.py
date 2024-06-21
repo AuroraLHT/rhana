@@ -311,7 +311,7 @@ class IOUMaskTracker:
                 best_match = max(detections, key=lambda x: iou(track['bboxes'][-1], x['bbox'], track['image'], x['image'], track['area'], x['area']))
                 if iou(track['bboxes'][-1], best_match['bbox'], track['image'], best_match['image'], track['area'], best_match['area']) >= self.sigma_iou:
                     track['bboxes'].append(best_match['bbox'])
-                    track['region_ids'].append(best_match['region_id'])
+                    track['ids'].append(best_match['id'])
                     track['image'] = best_match['image']
                     track['area'] = best_match['area']
                     # we do not have score here
@@ -319,7 +319,7 @@ class IOUMaskTracker:
 
                     updated_tracks.append(track)
                     
-                    region2track[best_match['region_id']] = track['track_id']
+                    region2track[best_match['id']] = track['track_id']
                     
                     # remove from best matching detection from detections
                     del detections[detections.index(best_match)]
@@ -342,8 +342,8 @@ class IOUMaskTracker:
         new_tracks = []
         for det in detections:
             track_id = self.track_id()
-            new_tracks.append({'bboxes': [det['bbox']], 'region_ids':[det['region_id']], 'image':det['image'], 'area':det['area'], 'start_frame': frame_num, 'track_id' : track_id})
-            region2track[det['region_id']] = track_id
+            new_tracks.append({'bboxes': [det['bbox']], 'ids':[det['id']], 'image':det['image'], 'area':det['area'], 'start_frame': frame_num, 'track_id' : track_id})
+            region2track[det['id']] = track_id
             
         self._tracks_active = updated_tracks + new_tracks
 
