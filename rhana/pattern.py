@@ -576,12 +576,12 @@ class Rheed:
                     best_ss_i = ss_i
                     best_dist = dist
 
-            self.xy = best_xy
+            self.laue_xy = best_xy
             self.ss = best_ss
-            self.r = best_r
+            self.laue_r = best_r
             
             # return xy location and radius
-            return self.xy, self.r
+            return self.laue_xy, self.laue_r
         else:
             raise Exception("either direct beam or specular beam is not detected")
 
@@ -603,11 +603,11 @@ class Rheed:
             ssc = np.array([ssx, ssy])
 
             xy = np.stack( [dbc, ssc], axis=0 ).mean(axis=0)
-            self.r = np.mean( (np.linalg.norm(xy-dbc), np.linalg.norm(xy-ssc)) )        
-            self.xy = xy
+            self.laue_r = np.mean( (np.linalg.norm(xy-dbc), np.linalg.norm(xy-ssc)) )        
+            self.laue_xy = xy
             
             # return xy location and radius
-            return self.xy, self.r
+            return self.laue_xy, self.laue_r
         else:
             raise Exception("either direct beam or specular beam is not detected")
 
@@ -1369,7 +1369,9 @@ class InstanceSegmentationItem:
         if inplace:
             this = self
         else:
-            this = copy.deepcopy(self)
+            # TODO: find another way to clone the obj
+            # the region could not be deepcopy
+            this = copy.copy(self)
 
         for k, v in kargs.items():
             # TODO: maybe add a check of the attribute before update
@@ -1381,13 +1383,15 @@ class InstanceSegmentationItem:
 
     def crop(self, sx, sy, ex, ey, inplace=False):
         bbox = self.bbox
-        bbox = (bbox[0] - sx, bbox[1] - sy, bbox[2] - sx, bbox[3] - sy)
+        bbox = [bbox[0] - sx, bbox[1] - sy, bbox[2] - sx, bbox[3] - sy]
+        bbox[0] = max(bbox[0], 0)
+        bbox[1] = max(bbox[1], 0)
         bbox[2] = min(bbox[2], ex)
         bbox[3] = min(bbox[3], ey)
-        
+        bbox = tuple(bbox)
         mask = crop(self.mask, sx=sx, sy=sy, ex=ex, ey=ey)
 
-        self._update(inplace, bbox=bbox, mask=mask)
+        return self._update(inplace, bbox=bbox, mask=mask)
 
 
 class RheedInstanceSegmentation:
@@ -1403,7 +1407,7 @@ class RheedInstanceSegmentation:
         """
         self.rd = rd
         self.inst_segs = inst_segs
-
+        self.auto_compute_regions = auto_compute_regions
         if auto_compute_regions:
             self.compute_regions(with_intensity=True)
 
@@ -1411,12 +1415,15 @@ class RheedInstanceSegmentation:
         if inplace:
             this = self
         else:
-            this = copy.deepcopy(self)
+            # no deep copy
+            this = copy.copy(self)
 
         for k, v in kargs.items():
             # TODO: maybe add a check of the attribute before update
             # make this functionality a abstract thing?
             setattr(this, k, v)
+        if self.auto_compute_regions:
+            self.compute_regions(with_intensity=True)
 
         return this
     
@@ -1469,9 +1476,9 @@ class RheedInstanceSegmentation:
         rd = self.rd.crop(sx, sy, ex, ey, inplace=inplace)
         for item in self.inst_segs:
             item.crop( sx, sy, ex, ey, inplace=inplace)
-        inst_segs = self.inst_segs if inplace else list(inst_segs)
+        inst_segs = self.inst_segs if inplace else list(self.inst_segs)
         
-        return self._update(rd=rd, inst_segs=self.inst_segs)
+        return self._update(rd=rd, inst_segs=inst_segs)
 
     @property
     def regions(self):

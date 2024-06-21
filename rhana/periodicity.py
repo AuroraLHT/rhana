@@ -76,7 +76,7 @@ class PeriodicityAnalyzer:
         #     print(arr)
         #     print(select_idx)
         nonzero_multi = selected_multi != 0
-        avg_dist = np.sum( 
+        avg_dist = np.sum(
             center_nbr_dists[select_idx][nonzero_multi] / selected_multi[nonzero_multi] ) / (sum(nonzero_multi)
         )
         avg_err = (np.sum( abs(center_nbr_dists[select_idx][nonzero_multi] / selected_multi[nonzero_multi] - avg_dist) ) ) / (sum(nonzero_multi))
