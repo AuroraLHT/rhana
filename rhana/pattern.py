@@ -1123,7 +1123,7 @@ class RheedMask():
 
             self.collapses_peaks_pgs = analyzer.analyze(
                 arr= self.collapses_peaks_flatten,
-                center=self.rd.pattern.shape[1]//0,
+                center=self.rd.pattern.shape[1]//2,
                 grid_min=0,
                 grid_max= self.rd.pattern.shape[1],
             )
