@@ -103,6 +103,8 @@ class PeriodicityAnalyzer:
         arr = np.array(arr)
         if arr_mask is None: arr_mask = np.zeros_like(arr, dtype=bool)
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
+        if cp is None: raise ValueError("Cannot find the center element")
+
         center_nbr_dists = np.abs( arr - cp ).astype(float)
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
         center_peaks_mask = center_nbr_dists < self.center_tolerant
@@ -159,6 +161,8 @@ class PeriodicityAnalyzer:
         arr = np.array(arr)
         if arr_mask is None: arr_mask = np.zeros_like(arr, dtype=bool)
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
+        if cp is None: raise ValueError("Cannot find the center element")
+
         center_nbr_dists = np.abs( arr - cp )
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
         center_peaks_mask = center_nbr_dists < self.center_tolerant
@@ -260,6 +264,8 @@ class PeriodicityAnalyzer:
         mask = np.zeros((len(arr), len(arr)), dtype=bool)
         out = []
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
+        if cp is None: raise ValueError("Cannot find the center element")
+
         center_nbr_dists = np.abs( arr - cp ).astype(np.float64)
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
 
@@ -309,7 +315,7 @@ class PeriodicityAnalyzer:
             
         return out
 
-    def is_sub_family(self, group1, group2):
+    def is_sub_family(self, group1, group2, ignore_same_order=True):
         """
             check if group 1 or 2 average distance is some integer of
             gourp 2 or 1. Very important when checking the epitaxial 
@@ -319,7 +325,12 @@ class PeriodicityAnalyzer:
         base = min(group1.avg_dist, group2.avg_dist)
         multi = max(group1.avg_dist, group2.avg_dist)
 
-        abs_diff = np.abs( np.round( multi / base ) * base - multi )
+        multiplier = np.round( multi / base )
+
+        if ignore_same_order and multiplier == 1:
+            return False
+
+        abs_diff = np.abs( multiplier * base - multi )
         diff = abs_diff / base
 
         return diff <= self.tolerant and abs_diff <= self.abs_tolerant
@@ -435,7 +446,9 @@ def get_elements_within_tolerant(arr:List[float], search_target:float, tolerant:
 
 def get_cloest_element(arr:List[float], search_target:float, tolerant:float):
     elements = get_elements_within_tolerant(arr, search_target, tolerant)
-    return elements[ np.argmin( [e[2] for e in elements] ) ]
+    if len(elements):
+        return elements[ np.argmin( [e[2] for e in elements] ) ]
+    return None, None, None
 
 def get_all_nbr_idxs(center_i:int, idxs:List[int]):
     """
