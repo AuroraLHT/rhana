@@ -1120,9 +1120,9 @@ class RheedMask():
                 abs_tolerant=abs_tolerant, 
                 allow_discontinue=allow_discontinue
             )
-
+            # print(self.collapses_peaks_ws_flatten)
             self.collapses_peaks_pgs = analyzer.analyze(
-                arr= self.collapses_peaks_flatten,
+                arr= self.collapses_peaks_ws_flatten,
                 center=self.rd.pattern.shape[1]//2,
                 grid_min=0,
                 grid_max= self.rd.pattern.shape[1],
@@ -1250,13 +1250,13 @@ class RheedMask():
         
         for i, res in enumerate(self.collapses_peaks_pgs):            
             ax.vlines(
-                x= self.collapses_peaks_ws_flatten[res.peaks_family.astype(int)],
+                x= self.collapses_peaks_ws_flatten[res.family_idx.astype(int)],
                 ymin=0.05*self.rd.pattern.shape[0], ymax=0.95*self.rd.pattern.shape[0],
                 alpha=0.5, 
                 color=plt.cm.Set1.colors[i]
             )
             if show_text:
-                for p in self.collapses_peaks_ws_flatten[res.peaks_family.astype(int)]:
+                for p in self.collapses_peaks_ws_flatten[res.family_idx.astype(int)]:
                     ax.text(x=p, y=20*(i+1), s=f"{res.avg_dist:.1f}", color=dist_text_color)
         
         return fig, ax
@@ -1290,7 +1290,7 @@ class RheedMask():
                 selected = [self.collapses_peaks_pgs[i] for i, cl in enumerate(self.cluster_labels) if cl == ul]
                 
                 for j, ana in enumerate(selected):
-                    for p in ana.peaks_family:
+                    for p in ana.family_idx:
                         if p in cidxs: continue 
                         pid = self.collapses_peaks_flatten_pids[p]
                         rid = self.collapses_peaks_flatten_regions[p]
