@@ -1382,13 +1382,19 @@ class InstanceSegmentationItem:
 
 
     def crop(self, sx, sy, ex, ey, inplace=False):
+        # check if bbox is outside the crop region
+        if (self.bbox[2] < sy or self.bbox[0] > ey or 
+            self.bbox[3] < sx or self.bbox[1] > ex):
+            return None
+        
         bbox = self.bbox
-        bbox = [bbox[0] - sx, bbox[1] - sy, bbox[2] - sx, bbox[3] - sy]
-        bbox[0] = max(bbox[0], 0)
-        bbox[1] = max(bbox[1], 0)
-        bbox[2] = min(bbox[2], ex)
-        bbox[3] = min(bbox[3], ey)
-        bbox = tuple(bbox)
+        bbox[2] = min(bbox[2], ey)
+        bbox[3] = min(bbox[3], ex)
+        bbox[0] = max(bbox[0], sy)
+        bbox[1] = max(bbox[1], sx)
+
+        bbox = np.array(bbox) - np.array([sy, sx, sy, sx])
+        bbox = np.clip(bbox, 0, None)
         mask = crop(self.mask, sx=sx, sy=sy, ex=ex, ey=ey)
 
         return self._update(inplace, bbox=bbox, mask=mask)
@@ -1437,6 +1443,11 @@ class RheedInstanceSegmentation:
         
         inst_segs = []
         for i in range(len(labels)):
+            
+            # skip the detection that has no mask
+            if masks[i].sum() == 0:
+                continue
+
             label = int(labels[i])
             try:
                 label_name = detector_model.cfg['metainfo']['classes'][label]
@@ -1474,11 +1485,15 @@ class RheedInstanceSegmentation:
             RheedMask: either itself or a newly created RheedMask obj       
         """
         rd = self.rd.crop(sx, sy, ex, ey, inplace=inplace)
+
+        new_inst_segs = []
         for item in self.inst_segs:
-            item.crop( sx, sy, ex, ey, inplace=inplace)
-        inst_segs = self.inst_segs if inplace else list(self.inst_segs)
+            new_item = item.crop( sx, sy, ex, ey, inplace=inplace)
+            if new_item is not None and new_item.mask.sum() > 0:
+                new_inst_segs.append(new_item)
+        inst_segs = new_inst_segs if not inplace else self.inst_segs
         
-        return self._update(rd=rd, inst_segs=inst_segs)
+        return self._update(inplace=inplace, rd=rd, inst_segs=inst_segs)
 
     @property
     def regions(self):
@@ -1581,13 +1596,13 @@ class RheedInstanceSegmentation:
             RheedMask: return the object itself
         """
         for cs in self.collapses:
-            if rm_bg:
+            if rm_bg and len(cs.ws) > 2:
                 try:
                     cs.remove_background()
                 except np.linalg.LinAlgError as e:
                     warnings.warn(f"Encounter LinAlgError when doing background removal! {e}")
             if scale: cs.normalize()
-            if smooth: cs.smooth()
+            if smooth and len(cs.ws) > 2: cs.smooth()
         return self
 
 
@@ -1616,11 +1631,16 @@ class RheedInstanceSegmentation:
         self.collapses_peaks_ws = []
         self.collapses_peaks_info = []
         for cs in self.collapses:
-            if cs is not None:
+            if cs is not None and len(cs.ws) > 2:
                 peaks, peaks_info = cs.find_spectrum_peaks(height=height, threshold=threshold, prominence=prominence)
                 self.collapses_peaks.append( peaks )
                 self.collapses_peaks_ws.append( cs.ws[peaks] )
-                self.collapses_peaks_info.append( peaks_info )
+                self.collapses_peaks_info.append(peaks_info)
+            elif cs is not None and len(cs.ws) <= 2 and len(cs.ws) > 0:
+                peaks = np.array([0])
+                self.collapses_peaks.append(peaks)
+                self.collapses_peaks_ws.append(cs.ws[peaks])
+                self.collapses_peaks_info.append(None)
             else:
                 self.collapses_peaks.append([])
                 self.collapses_peaks_ws.append([])
@@ -1641,6 +1661,7 @@ class RheedInstanceSegmentation:
         topr = None
         topr_i  = -1
         labels = self.regions_label
+        assert len(self.regions) > 0, "has no region to analysis"
         for i, r in enumerate(self.regions):
             label_condition = region_label == labels[i] if region_label != -1 else True
             if r.centroid[0] < topx and label_condition:
@@ -1961,7 +1982,7 @@ class RheedInstanceSegmentation:
         return fig, ax
 
 
-    def plot_region(self, region_id:int, zoom:bool=True, ax=None, **fig_kargs):
+    def plot_region(self, region_id:int, zoom:bool=True, ax=None, show_axes=False, **fig_kargs):
         """Plot one region in the form of bounding box. An inset plot of the pattern within the region
         is also inserted if zoom is set to true.
 
@@ -1975,7 +1996,7 @@ class RheedInstanceSegmentation:
             matplotlib.pyplot.Axes: plot's axes
         """
         fig, ax = _create_figure(ax=ax, **fig_kargs)
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
 
         region = self.regions[region_id]
 
@@ -1996,7 +2017,7 @@ class RheedInstanceSegmentation:
         return fig, ax
 
 
-    def plot_regions(self, ax=None, min_area:float=0.0, centroid=False,**fig_kargs):
+    def plot_regions(self, ax=None, min_area:float=0.0, centroid=False, show_axes=False, **fig_kargs):
         """Plot all extracted regions from the mask.
 
         Args:
@@ -2013,7 +2034,7 @@ class RheedInstanceSegmentation:
         # image_label_overlay = label2rgb(self.label, image=self.rd.pattern, bg_label=0)
 
         # ax.imshow(image_label_overlay)
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
 
         for rid, region in enumerate(self.regions):
             # take regions with large enough areas
@@ -2031,7 +2052,7 @@ class RheedInstanceSegmentation:
         return fig, ax
 
 
-    def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True):
+    def plot_peak_dist(self, ax=None, dist_text_color="white", show_axes=False, show_text=True):
         """Plot the extracted peak family periodicity. Call this method when finish the 
         periodicity analysis first.
 
@@ -2046,7 +2067,7 @@ class RheedInstanceSegmentation:
         """
         fig, ax = _create_figure(ax)
         
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
         
         for i, res in enumerate(self.collapses_peaks_pgs):            
             ax.vlines(
