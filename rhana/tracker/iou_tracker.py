@@ -147,14 +147,23 @@ class IOUTracker:
             t_min (int, optional): Number of frames that required to set the trace to be terminate. Defaults to 2.
             sigma_iou (float, optional): the minimum iou value for two bounding boxes to be treated as from the same trace. Defaults to 0.5.
         """
-        self._tracks_active = []
-        self._tracks_finished = []
         self.t_min= t_min
         self.sigma_iou= sigma_iou
+
+        self.clear_history()
+        # self._tracks_active = []
+        # self._tracks_finished = []
+        # self._track_id = 0
+        # self.det2track = {}
+        # self.track2det = {}
+    
+    def clear_history(self):
+        self._tracks_active = []
+        self._tracks_finished = []
         self._track_id = 0
         self.det2track = {}
         self.track2det = {}
-    
+
     def next_track_id(self):
         """Generate a new track_id
 
