@@ -20,11 +20,14 @@ class PeriodicityTracker:
     def __init__(self, analyzer, disconnect_time=10, curr_frame_num=-1):
         self.analyzer = analyzer
         self.disconnect_time = disconnect_time
+        self.curr_frame_num = curr_frame_num
+        self.clear_history()
+
+    def clear_history(self):
         self.finished_traces = []
         self.active_traces = []
         self.periodicitygroups = []
         self._next_trace_id = 0
-        self.curr_frame_num = curr_frame_num
 
     @property
     def traces(self):
@@ -45,29 +48,34 @@ class PeriodicityTracker:
             matched_mask = np.zeros_like(arr, dtype=bool)
         else:        
             periodicities = [t.get_last_element()[0] for t in self.active_traces]
-            mpgs, mres, matched_mask = self.analyzer.match_periodicity(
-                arr = arr, 
-                periodicities = periodicities,
-                center = center,
-                grid_min = grid_min,
-                grid_max = grid_max,
-            )
-    
-            active_traces = []
-            for i, pg in enumerate(mpgs):
-                trace = self.active_traces[i]
-                if pg is None:
-                    pass                    
-                else:
-                    trace.add(pg, frame_num)
-                    
-                if (frame_num - trace.frame_nums[-1] > self.disconnect_time):                    
-                    self.finished_traces.append(trace)
-                else:
-                    active_traces.append(trace)
-                    
-            self.active_traces = active_traces
-        
+            try:
+                mpgs, mres, matched_mask = self.analyzer.match_periodicity(
+                    arr = arr, 
+                    periodicities = periodicities,
+                    center = center,
+                    grid_min = grid_min,
+                    grid_max = grid_max,
+                )
+
+                active_traces = []
+                for i, pg in enumerate(mpgs):
+                    trace = self.active_traces[i]
+                    if pg is None:
+                        pass                    
+                    else:
+                        trace.add(pg, frame_num)
+                        
+                    if (frame_num - trace.frame_nums[-1] > self.disconnect_time):                    
+                        self.finished_traces.append(trace)
+                    else:
+                        active_traces.append(trace)
+
+                self.active_traces = active_traces
+
+            except Exception as e:
+                print(f"Periodicity Match Error: {e}")
+                matched_mask = np.zeros_like(arr, dtype=bool)
+       
         return matched_mask
 
     def get_current_periodicities(self, frame_num):
