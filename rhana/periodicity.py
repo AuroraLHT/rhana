@@ -48,18 +48,49 @@ class PeriodicityAnalyzer:
         nbr_grid_dm = abs(distance_matrix(center_nbr_dists[:, None], grid[:, None])) # this step could be optimize to O(n)
         close = nbr_grid_dm.argmin(axis=1) # a array of peak id that has the shortest distance to one of the tick in the grid 
         
-        match_error = nbr_grid_dm[np.arange(len(center_nbr_dists)), close] # get the distance of those arr to the grid
+        _match_error = nbr_grid_dm[np.arange(len(center_nbr_dists)), close] # get the distance of those arr to the grid
 
-        select_mask = np.abs(match_error) < min(tolerant * grid_dist, abs_tolerant) # (binary) pick those with acceptable distance
-
+        select_mask = np.abs(_match_error) < min(tolerant * grid_dist, abs_tolerant) # (binary) pick those with acceptable distance
         select_idx = np.where(select_mask)[0] # (center neighbor integar index) 
-
         gidx = close[ select_mask ] # (grid integar index)
-        uni_gidx = np.unique(gidx)
-        uni_gidx.sort()
+        match_error = _match_error[select_mask]
 
-        continuity = np.diff(uni_gidx) # (ses if there are disconnection)
-        allowed = np.all(continuity <= allow_discontinue+1) # (selected if only the pattern has no/less disconnection)
+        center_gidx = np.where(grid==0)[0]
+        upper_gidx = gidx[gidx>=center_gidx]
+        lower_gidx = gidx[gidx<center_gidx]
+        upper_gidx.sort()
+        lower_gidx.sort()
+        lower_gidx = lower_gidx[::-1]
+
+        discard_gidx = []
+        # print("center_nbr_dists", center_nbr_dists)
+        # print("grid", grid)
+        # print("upper_gidx", upper_gidx)
+        # print("lower_gidx", lower_gidx)
+
+        for i in range(len(upper_gidx)-1):
+            if abs(upper_gidx[i+1] - upper_gidx[i]) > allow_discontinue:
+                to_discard = upper_gidx[i+1:].tolist()
+                discard_gidx = discard_gidx + to_discard
+                break
+
+        for i in range(len(lower_gidx)-1):
+            if abs(lower_gidx[i+1] - lower_gidx[i]) > allow_discontinue:
+                to_discard = lower_gidx[i+1:].tolist()
+                discard_gidx = discard_gidx + to_discard
+                break
+
+        # print("discard_gidx", discard_gidx)
+        # print("gidx", gidx)
+        
+        kept_mask = np.array( [ g not in discard_gidx for g in gidx ] )
+        gidx = gidx[kept_mask]
+        select_idx = select_idx[kept_mask]
+        match_error = match_error[kept_mask]
+
+        # print("gidx", gidx)
+        allowed = True if len(gidx) >= 1 else False
+        uni_gidx = np.unique(gidx)
 
         if allowed and len(uni_gidx) > 1:
             selected_multi = grid[gidx] / grid_dist            
@@ -68,13 +99,9 @@ class PeriodicityAnalyzer:
             # avg_err = (np.sum( abs(center_nbr_dists[select_idx][nonzero_multi] / selected_multi[nonzero_multi] - avg_dist) ) ) / (sum(nonzero_multi))
         else:
             selected_multi = []            
-        return allowed, select_idx, gidx, selected_multi, match_error[select_mask]
+        return allowed, select_idx, gidx, selected_multi, match_error
 
     def _get_group(self, arr, center_nbr_dists, select_idx, selected_multi):
-        # print(arr)
-        # if 22 in select_idx: 
-        #     print(arr)
-        #     print(select_idx)
         nonzero_multi = selected_multi != 0
         avg_dist = np.sum(
             center_nbr_dists[select_idx][nonzero_multi] / selected_multi[nonzero_multi] ) / (sum(nonzero_multi)
@@ -103,13 +130,16 @@ class PeriodicityAnalyzer:
         arr = np.array(arr)
         if arr_mask is None: arr_mask = np.zeros_like(arr, dtype=bool)
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
-        if cp is None: raise ValueError("Cannot find the center element")
+        if cp is None: 
+            print("Cannot find the center element during match_periodicity, use the given center instead")
+            cp = center
+            # return None, None, None
 
         center_nbr_dists = np.abs( arr - cp ).astype(float)
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
         center_peaks_mask = center_nbr_dists < self.center_tolerant
  
-        match_order = np.argsort( [ p.avg_dist for p in periodicities ] )[::-1] # match from big to small
+        match_order = np.argsort( [ p.avg_dist for p in periodicities ] ) # match from small to big
         targets = [ (create_grid(grid_min, grid_max, cp, p.avg_dist), p.avg_dist) for p in periodicities]
         
         max_value= np.inf
@@ -119,9 +149,16 @@ class PeriodicityAnalyzer:
 
         match_periodicities = [None] * len(periodicities)
 
+
         for i in match_order:
         # for i, (grid, grid_dist) in enumerate(targets):
             grid, grid_dist = targets[i]
+            # print("grid", grid)
+            # print("grid_dist", grid_dist)
+            # print("center_nbr_dists", center_nbr_dists)
+            # print("self.tolerant", self.tolerant)
+            # print("self.abs_tolerant", self.abs_tolerant)
+            # print("self.allow_discontinue", self.allow_discontinue)
             allowed, select_idx, gidx, selected_multi, match_error = self._match_grid(
                 grid=grid,
                 grid_dist=grid_dist,
@@ -130,6 +167,12 @@ class PeriodicityAnalyzer:
                 abs_tolerant=self.abs_tolerant,
                 allow_discontinue=self.allow_discontinue
             )
+
+            # print("allowed", allowed)
+            # print("select_idx", select_idx)
+            # print("gidx", gidx)
+            # print("selected_multi", selected_multi)
+            # print("match_error", match_error)
 
             if allowed and len(np.unique(gidx))>1:
                 match_periodicities[i] = self._get_group(
@@ -145,7 +188,8 @@ class PeriodicityAnalyzer:
                 matched[center_peaks_mask] = False
                 center_nbr_dists[matched] = max_value
 
-
+        matched[ci] = False # don't match the center element
+        
         return match_periodicities, match_res, matched
 
 
@@ -161,7 +205,9 @@ class PeriodicityAnalyzer:
         arr = np.array(arr)
         if arr_mask is None: arr_mask = np.zeros_like(arr, dtype=bool)
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
-        if cp is None: raise ValueError("Cannot find the center element")
+        if cp is None: 
+            print("Cannot find the center element during match_periodicity (v2), use the given center instead")
+            cp = center
 
         center_nbr_dists = np.abs( arr - cp )
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
@@ -264,14 +310,16 @@ class PeriodicityAnalyzer:
         mask = np.zeros((len(arr), len(arr)), dtype=bool)
         out = []
         ci, cp, _ = get_cloest_element(arr, center, self.center_tolerant)
-        if cp is None: raise ValueError("Cannot find the center element")
+        if cp is None: 
+            print("Cannot find the center element during analyze, use the given center instead")
+            cp = center
 
         center_nbr_dists = np.abs( arr - cp ).astype(np.float64)
         if np.any(arr_mask): center_nbr_dists[arr_mask] = np.inf
 
-        for j in get_all_nbr_idxs(ci, np.arange(len(arr))):
+        for j in get_all_nbr_idxs(ci, center_nbr_dists):
             if ci == j : continue
-            if mask[ci, j] : continue
+            if mask[j, j] : continue # avoid picking up the processed index
 
             dist = abs(center_nbr_dists[j])
 
@@ -450,28 +498,35 @@ def get_cloest_element(arr:List[float], search_target:float, tolerant:float):
         return elements[ np.argmin( [e[2] for e in elements] ) ]
     return None, None, None
 
-def get_all_nbr_idxs(center_i:int, idxs:List[int]):
+def get_all_nbr_idxs(center_i:int, center_nbr_dists:Union[List[float], np.ndarray]):
     """
     A generator of all neighbors indexs given a starting index
     Example:
 
     center_i = 3
-    idx = 0, 1, 2, 3, 4, 
+    center_nbr_dists = [-3, -2, -1, 0, 1]
+    -> idx = 0, 1, 2, 3, 4, 
 
     what it yields in order:
         2, 4, 1, 0
         
     Args:
         center_i : the center indexes
-        idxs : all the allowed indexes
+        center_nbr_dists : the distance (>=0) between the center and all the other peaks
         
     Returns:
         generator : a generator of indexes
     """
+
+    idxs = np.arange(len(center_nbr_dists))
     level = 0
     endleft = False
     endright = False
     maxidx = max(idxs)
+
+    if center_i is None:
+        return np.argsort(center_nbr_dists)
+
 
     while not (endleft and endright):
         level = level + 1
