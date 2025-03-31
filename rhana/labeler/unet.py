@@ -80,7 +80,7 @@ def rle_decode(mask_rle:str, shape:Union[Tuple, List]):
     starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
     starts -= 1
     ends = starts + lengths
-    img = np.zeros(shape[0]*shape[1], dtype=np.uint)
+    img = np.zeros(int(np.prod(shape)), dtype=np.uint)
     for low, up in zip(starts, ends): img[low:up] = 1
     return img.reshape(shape)
 
