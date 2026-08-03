@@ -36,7 +36,7 @@ from skimage.measure import moments
 
 from typing import List, Dict, Union
 
-from rhana.utils import _CM_rgb, _CM, _CM_np, multi_gaussian, gaussian, show_circle, _create_figure, crop
+from rhana.utils import _CM_rgb, _CM, _CM_np, multi_gaussian, gaussian, show_circle, _create_figure, crop, show_rect
 from rhana.io import kashiwa as ksw
 from rhana.spectrum.spectrum import CollapseSpectrum, analyze_peaks_distance_cent, get_center_peak_idxs, get_center_peak_idx, get_peaks_distance
 from rhana.utils import *
@@ -437,7 +437,7 @@ class Rheed:
         self.blobs = blobs_log
         return blobs_log
 
-    def plot_blobs(self, blob_color="red", ax=None, **fig_kargs):
+    def plot_blobs(self, blob_color="red", ax=None, show_axes=False, **fig_kargs):
         """
         plot the blobs location on the RHEED pattern
         
@@ -451,11 +451,11 @@ class Rheed:
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
-        self.plot_pattern(ax=ax)
+        self.plot_pattern(ax=ax, show_axes=show_axes)
         for blob in self.blobs:
             x, y, r = blob
             show_circle(ax, (x,y), r, color=blob_color)
-        ax.set_axis_off()
+        # ax.set_axis_off()
         
         return fig, ax
 
@@ -611,7 +611,7 @@ class Rheed:
         else:
             raise Exception("either direct beam or specular beam is not detected")
 
-    def plot_0laue(self, ax=None, plot_aux=False, **fig_kargs):
+    def plot_0laue(self, ax=None, plot_aux=False, show_axes=False, **fig_kargs):
         """Plot the 0 order laue circle
         
         Args:
@@ -623,7 +623,7 @@ class Rheed:
         """    
     
         if hasattr(self, "laue_xy") and hasattr(self, "laue_r"):
-            fig, ax = self.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, **fig_kargs)
+            fig, ax = self.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, show_axes=show_axes, **fig_kargs)
         if plot_aux:
             ax.vlines([self.laue_xy[1], self.laue_xy[1] - self.laue_r, self.laue_xy[1] + self.laue_r], 0, self.pattern.shape[0]-1)
             # plt.vlines(, 0, rd_.pattern.shape[0]-1)
@@ -631,7 +631,7 @@ class Rheed:
         
         return fig, ax
         
-    def plot_nlaue(self, xy, rs, ax=None, **fig_kargs):
+    def plot_nlaue(self, xy, rs, ax=None, show_axes=False, **fig_kargs):
         """Plot multiple laue circles. 
 
         Args:
@@ -645,10 +645,10 @@ class Rheed:
         """
         
         fig, ax = _create_figure(ax=ax, **fig_kargs)
-        self.plot_pattern(ax=ax)
+        self.plot_pattern(ax=ax, show_axes=show_axes)
         for r in rs:
             show_circle(ax, xy, r )
-        ax.set_axis_off()
+        # ax.set_axis_off()
         
         return fig, ax
 
@@ -681,6 +681,14 @@ class Rheed:
         )
         return fig
 
+    def plot_bboxes(self, bboxes, ax=None, show_axes=False, cmap=None, **fig_kargs):
+        """Plot pattern with blobs
+        """
+        fig, ax = self.plot_pattern(ax=ax, show_axes=show_axes, cmap=cmap, **fig_kargs)        
+        for bbox in bboxes:
+            show_rect(ax, bbox)
+        return fig, ax
+
     def plot_pattern(self, ax=None, show_axes=False, cmap=None, **fig_kargs):
         """Plot pattern with matplotlib
 
@@ -688,6 +696,7 @@ class Rheed:
             ax (matplotlib.pyplot.Axes, optional): Figure's Axes. Defaults to None.
             show_axes (bool, optional): show the x y label and ticks. Defaults to False.
             cmap (str, optional): Matplotlib continueous colormap name. Defaults to None.
+            fig_kargs (dict, optional): additional arguments for the figure. Defaults to None.
 
         Returns:
             matplotlib.pyplot.Figure : plot's figure
@@ -697,8 +706,12 @@ class Rheed:
         ax.imshow(self.pattern, cmap=cmap if cmap is not None else self._CMAP)
 
         if show_axes:
-            ax.set_xlabel("x (pixel)")
-            ax.set_ylabel("y (pixel)")
+            ax.set_xlabel("y (pixel)")
+            ax.set_ylabel("x (pixel)")
+            ax.set_xticks(np.arange(0, self.pattern.shape[1], 50))  # Major ticks
+            ax.set_xticks(np.arange(0, self.pattern.shape[1], 10), minor=True)  # Minor ticks
+            ax.set_yticks(np.arange(0, self.pattern.shape[0], 50))  # Major ticks 
+            ax.set_yticks(np.arange(0, self.pattern.shape[0], 10), minor=True)  # Minor ticks
         else:
             ax.set_axis_off()
 
@@ -1142,7 +1155,7 @@ class RheedMask():
         return self.collapses_peaks_pgs
 
 
-    def plot_pattern_masks(self, ax=None):
+    def plot_pattern_masks(self, ax=None, show_axes=False):
         """Plot the pattern with the mask overlay
 
         Args:
@@ -1156,12 +1169,12 @@ class RheedMask():
         # plot pattern and mask
         fig, ax = _create_figure(ax=ax)
 
-        self.rd.plot_pattern(ax)
+        self.rd.plot_pattern(ax, show_axes=show_axes)
         ax.imshow(self.mask, alpha=0.7)
         return fig, ax
 
 
-    def plot_region(self, region_id:int, zoom:bool=True, ax=None, **fig_kargs):
+    def plot_region(self, region_id:int, zoom:bool=True, ax=None, show_axes=False, **fig_kargs):
         """Plot one region in the form of bounding box. An inset plot of the pattern within the region
         is also inserted if zoom is set to true.
 
@@ -1175,7 +1188,7 @@ class RheedMask():
             matplotlib.pyplot.Axes: plot's axes
         """
         fig, ax = _create_figure(ax=ax, **fig_kargs)
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
 
         region = self.regions[region_id]
 
@@ -1196,7 +1209,7 @@ class RheedMask():
         return fig, ax
 
 
-    def plot_regions(self, ax=None, min_area:float=0.0, centroid=False,**fig_kargs):
+    def plot_regions(self, ax=None, min_area:float=0.0, centroid=False, show_axes=False, **fig_kargs):
         """Plot all extracted regions from the mask.
 
         Args:
@@ -1213,7 +1226,7 @@ class RheedMask():
         # image_label_overlay = label2rgb(self.label, image=self.rd.pattern, bg_label=0)
 
         # ax.imshow(image_label_overlay)
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
 
         for rid, region in enumerate(self.regions):
             # take regions with large enough areas
@@ -1231,7 +1244,7 @@ class RheedMask():
         return fig, ax
 
 
-    def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True):
+    def plot_peak_dist(self, ax=None, dist_text_color="white", show_text=True, show_axes=False):
         """Plot the extracted peak family periodicity. Call this method when finish the 
         periodicity analysis first.
 
@@ -1246,7 +1259,7 @@ class RheedMask():
         """
         fig, ax = _create_figure(ax)
         
-        self.rd.plot_pattern(ax=ax)
+        self.rd.plot_pattern(ax=ax, show_axes=show_axes)
         
         for i, res in enumerate(self.collapses_peaks_pgs):            
             ax.vlines(
@@ -1428,8 +1441,8 @@ class RheedInstanceSegmentation:
             # TODO: maybe add a check of the attribute before update
             # make this functionality a abstract thing?
             setattr(this, k, v)
-        if self.auto_compute_regions:
-            self.compute_regions(with_intensity=True)
+        if this.auto_compute_regions:
+            this.compute_regions(with_intensity=True)
 
         return this
     
@@ -1529,15 +1542,17 @@ class RheedInstanceSegmentation:
         return self.regions
 
 
-    def filter_detections(self, min_area, inplace=True):
+    def filter_detections(self, min_area, min_score=0.0, inplace=True):
         """remove detection that has very small areas.
 
         Args:
             min_area (float): minimum value of a region's area 
             inplace (bool, optional): inplace (bool, optional): the operated result would overwrite the stored regions if True. Defaults to True.
 
+            min_score (float, optional): minimum score of a detection. Defaults to 0.0 (do nothing).
+
         """
-        filtered = [ item for item in self.inst_segs if item.region.area >= min_area ]
+        filtered = [ item for item in self.inst_segs if item.region.area >= min_area and item.score >= min_score ]
         return self._update(inplace, inst_segs=filtered)
 
 
@@ -1606,7 +1621,7 @@ class RheedInstanceSegmentation:
         return self
 
 
-    def fit_collapse_peaks(self, height:float, threshold:float, prominence:float):
+    def fit_collapse_peaks(self, height:float, threshold:float, prominence:float, max_peak_only=True):
         """Use the peak finding algorihm to get every peaks in every integrated region spectrums. 
         See scipy.signal.find_peaks for more details.
 
@@ -1621,6 +1636,7 @@ class RheedInstanceSegmentation:
             prominence (float): Required prominence of peaks. Either a number, None, an array matching x 
                 or a 2-element sequence of the former. The first element is always interpreted as the 
                 minimal and the second, if supplied, as the maximal required prominence.
+            max_peak_only (bool): only keep the highest peak in each spectrum since detector handle the overlaping features by itself. Defaults to True.
         Returns:
             list: a list of all spectrums peaks's index w.r.t spectrums
             list: a list of all spectrums peaks position in image x coordinate
@@ -1633,6 +1649,14 @@ class RheedInstanceSegmentation:
         for cs in self.collapses:
             if cs is not None and len(cs.ws) > 2:
                 peaks, peaks_info = cs.find_spectrum_peaks(height=height, threshold=threshold, prominence=prominence)
+                if max_peak_only:
+                    if len(peaks) == 0:
+                        peaks = []
+                        peaks_info = {}
+                    else:
+                        max_peak_idx = np.argmax(cs.spec[peaks])
+                        peaks = np.array([peaks[max_peak_idx]])
+                        peaks_info = { k : [v[max_peak_idx]] for k, v in peaks_info.items() }
                 self.collapses_peaks.append( peaks )
                 self.collapses_peaks_ws.append( cs.ws[peaks] )
                 self.collapses_peaks_info.append(peaks_info)
@@ -1835,7 +1859,7 @@ class RheedInstanceSegmentation:
             raise Exception("either direct beam or specular beam is not detected")
 
 
-    def plot_0laue(self, ax=None, plot_aux=False, **fig_kargs):
+    def plot_0laue(self, ax=None, plot_aux=False, show_axes=False, **fig_kargs):
         """Plot the 0 order laue circle
         
         Args:
@@ -1847,7 +1871,7 @@ class RheedInstanceSegmentation:
         """    
     
         if hasattr(self, "laue_xy") and hasattr(self, "laue_r"):
-            fig, ax = self.rd.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, **fig_kargs)
+            fig, ax = self.rd.plot_nlaue(self.laue_xy, [self.laue_r], ax=ax, show_axes=show_axes, **fig_kargs)
         if plot_aux:
             ax.vlines([self.laue_xy[1], self.laue_xy[1] - self.laue_r, self.laue_xy[1] + self.laue_r], 0, self.rd.pattern.shape[0]-1)
             # plt.vlines(, 0, rd_.pattern.shape[0]-1)
@@ -1949,7 +1973,36 @@ class RheedInstanceSegmentation:
         # return self.collapses_peaks_pgs
 
 
-    def plot_pattern_segs(self, ax=None, dpi=150, color_by="order"):
+    def plot_pattern_segs_by_class(
+        self, ax=None, 
+        dpi=150, 
+        class_name=None, class_color=None, 
+        show_axes=False, cmap=None, 
+        show_pattern=True
+    ):
+        # plot pattern and mask
+        fig, ax = _create_figure(ax=ax, dpi=dpi)
+        if show_pattern:
+            self.rd.plot_pattern(ax, show_axes=show_axes, cmap=cmap)
+        h, w = self.rd.pattern.shape
+        final_mask = np.zeros( (*self.rd.pattern.shape, 4), dtype=np.uint8 )
+        final_mask[:, :, -1] = 255
+        
+        for i, item in enumerate(self.inst_segs):
+            if item.label_name == class_name:
+                _mask = item.mask
+                if class_color is None:
+                    class_color = _CM_np[item.label%len(_CM_np)]
+                color = (*class_color, 255)
+                final_mask[_mask] = np.array( color, dtype=np.uint8)
+                ax.text( item.bbox[0] + h*0.01, item.bbox[1], f"{item.score:.2f}", fontdict={"color":"white", "size":5}, ha="center", va="bottom")
+        ax.imshow(final_mask, zorder=item.label)
+        if not show_axes:
+            ax.axis("off")
+        return fig, ax
+
+
+    def plot_pattern_segs(self, ax=None, dpi=150, color_by="order", show_axes=False, cmap=None):
         """Plot the pattern with the mask overlay
 
         Args:
@@ -1963,7 +2016,7 @@ class RheedInstanceSegmentation:
         
         # plot pattern and mask
         fig, ax = _create_figure(ax=ax, dpi=dpi)
-        self.rd.plot_pattern(ax)
+        self.rd.plot_pattern(ax, show_axes=show_axes, cmap=cmap)
         h, w = self.rd.pattern.shape
         for i, item in enumerate(self.inst_segs):
             final_mask = np.zeros( (*self.rd.pattern.shape, 4), dtype=np.uint8 )
@@ -1978,6 +2031,9 @@ class RheedInstanceSegmentation:
             final_mask[_mask] = np.array( color, dtype=np.uint8)
             ax.text( item.bbox[0] + h*0.01, item.bbox[1], item.label_name, fontdict={"color":"white", "size":5})
             ax.imshow(final_mask, zorder=item.label)        
+
+        if not show_axes:
+            ax.axis("off")
 
         return fig, ax
 
