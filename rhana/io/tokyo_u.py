@@ -466,7 +466,10 @@ class BaseRHEEDStreamReader:
         def _read_fblock_v1():
             self.maxframes = (self.directory_size - 16) // self.frame_block_sz
 
-        if self.version == 5:
+        if self.version == 6:
+            # v5 and v4 is same
+            _read_fblock_v5()                       
+        elif self.version == 5:
             # v5 and v4 is same
             _read_fblock_v5()                        
         elif self.version == 4:
