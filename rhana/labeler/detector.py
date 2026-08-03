@@ -5,6 +5,12 @@ The below mentioned model has been developed. milestone achieved. (yeh)
 The author wishes to upgrade the model to a object detector. If you are interest in extending the 
 current work, please email this guy (Haotong Liang, Email: hliang16@umd.edu). He is very willing to talk 
 with you and excite about the possible things that could be done in the future.
+
+update (1/15/2026)
+We settle back to using the CascadeMaskRCNN model for feature detection.
+and use the EfficientNet-V2 model for feature classification.
+
+The author wish to graduate soon in this summer.
 """
 
 import os.path as osp
@@ -43,11 +49,12 @@ class CascadeMaskRCNNDetector:
             checkpoint_path:Union[str, Path], 
             device:str=None
         ):
-        """Initializer of the UnetMasker
+        """Initializer of the CascadeMaskRCNNDetector
 
         Args:
-            learner_path (_type_): the pickle directory that store the FastAI Unet learner
-            cpu (bool, optional): use CPU if set to True else use GPU. Defaults to False.
+            config_path (str, Path): the config file of the detector
+            checkpoint_path (str, Path): the checkpoint file of the detector
+            device (str, optional): the device to use for the detector. Defaults to None.
         """
         if device is None: 
             device = torch.device("cpu")
@@ -59,13 +66,18 @@ class CascadeMaskRCNNDetector:
 
         self.visualizer = None
 
+    @property
+    def detector_classes(self):
+        return self.model.cfg['metainfo']['classes']
+
+
     def preprocess_rd(self, rd):
         if rd.pattern.ndim == 2:
             inp = np.repeat(rd.pattern[..., None], 3, axis=-1)
         else:
             inp = rd.pattern
 
-        inp *= 255
+        inp = inp * 255
 
         # return torch.from_numpy(inp)
         return inp
@@ -123,11 +135,12 @@ class CascadeMaskRCNNDetectorAndClassifier:
             classifier_checkpoint_path:Union[str, Path],
             device:str=None
         ):
-        """Initializer of the UnetMasker
+        """Initializer of the CascadeMaskRCNNDetectorAndClassifier
 
         Args:
-            learner_path (_type_): the pickle directory that store the FastAI Unet learner
-            cpu (bool, optional): use CPU if set to True else use GPU. Defaults to False.
+            config_path (str, Path): the config file of the detector
+            checkpoint_path (str, Path): the checkpoint file of the detector
+            device (str, optional): the device to use for the detector. Defaults to None.            
         """
         if device is None: 
             device = torch.device("cpu")
@@ -160,7 +173,7 @@ class CascadeMaskRCNNDetectorAndClassifier:
         else:
             inp = rd.pattern
 
-        inp *= 255
+        inp = inp * 255
 
         return inp
 
