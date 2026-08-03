@@ -17,6 +17,11 @@ class PeriodicityTrace:
 
 
 class PeriodicityTracker:
+    active_traces : List[PeriodicityTrace]
+    finished_traces : List[PeriodicityTrace]
+    periodicitygroups : List
+
+
     def __init__(self, analyzer, disconnect_time=10, curr_frame_num=-1):
         self.analyzer = analyzer
         self.disconnect_time = disconnect_time
@@ -30,11 +35,11 @@ class PeriodicityTracker:
         self._next_trace_id = 0
 
     @property
-    def traces(self):
+    def traces(self) -> List[PeriodicityTrace]:
         return self.active_traces + self.finished_traces
 
     @property
-    def next_trace_id(self):
+    def next_trace_id(self) -> int:
         self._next_trace_id += 1
         return self._next_trace_id
     
