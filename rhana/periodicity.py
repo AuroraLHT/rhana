@@ -362,6 +362,23 @@ class PeriodicityAnalyzer:
                 # )
             
         return out
+    
+    def compare_groups(self, group1, group2):
+        """
+        Compare two groups of peaks and return True if they are similar.
+        """
+        base = min(group1.avg_dist, group2.avg_dist)
+        multi = max(group1.avg_dist, group2.avg_dist)
+
+        multiplier = np.round( multi / base )
+        # print(f"multiplier: {multiplier}, base: {base}, multi: {multi}")
+
+        abs_diff = np.abs( multiplier * base - multi )
+        diff = abs_diff / multi
+        # print(f"diff: {diff}, abs_diff: {abs_diff}")
+
+        return (diff, abs_diff, multiplier)
+    
 
     def is_sub_family(self, group1, group2, ignore_same_order=True):
         """
@@ -370,17 +387,9 @@ class PeriodicityAnalyzer:
             phase. Some growth actually make 1/n streaks between the 
             original substrate streak.
         """
-        base = min(group1.avg_dist, group2.avg_dist)
-        multi = max(group1.avg_dist, group2.avg_dist)
-
-        multiplier = np.round( multi / base )
-
+        diff, abs_diff, multiplier = self.compare_groups(group1, group2)
         if ignore_same_order and multiplier == 1:
             return False
-
-        abs_diff = np.abs( multiplier * base - multi )
-        diff = abs_diff / base
-
         return diff <= self.tolerant and abs_diff <= self.abs_tolerant
 
         #     nbr_grid_dm = abs(distance_matrix(center_nbr_dists[:, None], grid[:, None])) # this step could be optimize to O(n)
