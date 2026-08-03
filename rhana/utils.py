@@ -51,6 +51,15 @@ def show_circle(ax, xy, radius, color="black", **kargs):
     ax.add_patch(cir)
     return ax
 
+def show_rect(ax, bbox, color="black", **kargs):
+    """
+        plot a rectangle on the matplotlib axes
+        bbox: [y1, x1, y2, x2] (array indexing order)
+    """
+    rect = mpatches.Rectangle((bbox[1], bbox[0]), bbox[3]-bbox[1], bbox[2]-bbox[0], fill=False, color=color, **kargs)
+    ax.add_patch(rect)
+    return ax
+
 def _create_figure(ax=None, **subplots_kargs):
     if ax is None:
         return plt.subplots(**subplots_kargs)
