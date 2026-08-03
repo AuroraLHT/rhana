@@ -17,10 +17,11 @@ setup(
     author="H Liang, V Stanev, A. G kusne, and I Takeuchi",
     author_email="auroralht@gmail.com, vstanev@umd.edu, aaron.kusne@nist.gov, takeuchi@umd.edu",
     packages=find_packages(),
-    install_requires=[
-        requirements,
-    ],
+    install_requires=[r.strip() for r in requirements],
     include_package_data=True,
+    package_data={
+        "rhana.io": ["config/*.yml", "asset/*.png"],
+    },
 
     classifiers=['Programming Language :: Python :: 3.8',
                   'Development Status :: 4 - Beta',

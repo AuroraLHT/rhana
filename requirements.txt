@@ -3,3 +3,6 @@ colorlover
 #fastai
 lmfit
 scikit-image
+pyyaml
+pillow
+numpy

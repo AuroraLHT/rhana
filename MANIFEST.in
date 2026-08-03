@@ -1,0 +1,2 @@
+recursive-include rhana/io/config *.yml
+recursive-include rhana/io/asset *.png
